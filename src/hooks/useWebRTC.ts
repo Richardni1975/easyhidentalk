@@ -30,22 +30,34 @@ export function useWebRTC() {
   const stopScreenShareRef = useRef<(() => void) | null>(null);
 
   const startLocalStream = useCallback(async () => {
+    const constraints: MediaStreamConstraints = {
+      audio: true,
+      video: {
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        facingMode: "user",
+      },
+    };
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: "user",
-        },
-      });
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       cameraVideoTrackRef.current = stream.getVideoTracks()[0] || null;
       localStreamRef.current = stream;
       setLocalStream(stream);
       return stream;
     } catch (err) {
-      console.error("Failed to get local stream:", err);
-      throw err;
+      // Retry without video if camera fails
+      console.warn("Failed to get camera, retrying with audio only:", err);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        cameraVideoTrackRef.current = null;
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+        return stream;
+      } catch (audioErr) {
+        console.error("Failed to get any media:", audioErr);
+        throw audioErr;
+      }
     }
   }, []);
 
