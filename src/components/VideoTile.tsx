@@ -23,8 +23,8 @@ export default function VideoTile({
     }
   }, [stream]);
 
-  const hasVideo = stream?.getVideoTracks().some((t) => t.enabled) && !participant.cameraOff;
-  const hasAudio = stream?.getAudioTracks().some((t) => t.enabled) && !participant.muted;
+  const hasVideo = stream?.getVideoTracks()?.some((t) => t.enabled) && !participant.cameraOff;
+  const hasAudio = stream?.getAudioTracks()?.some((t) => t.enabled) && !participant.muted;
 
   return (
     <div
