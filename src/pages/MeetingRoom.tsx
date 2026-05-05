@@ -52,6 +52,7 @@ function MeetingRoomInner() {
   const [viewingPoll, setViewingPoll] = useState<Poll | null>(null);
   const [showPollBrowser, setShowPollBrowser] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
+  const amHostRef = useRef(false); // true if we joined an empty room
 
   const {
     localStream,
@@ -187,10 +188,17 @@ function MeetingRoomInner() {
         userName: p.userName,
         realName: p.realName,
         isMomo: p.isMomo,
+        isHost: p.isHost || false,
+        joinedAt: p.joinedAt,
         muted: p.muted,
         cameraOff: p.cameraOff,
         handRaised: p.handRaised,
       }));
+
+      // If room was empty, we are the host
+      if (existing.length === 0) {
+        amHostRef.current = true;
+      }
       setParticipants(participantsList);
 
       // Create peer connections for each existing participant
@@ -230,6 +238,8 @@ function MeetingRoomInner() {
         userName: participant.userName,
         realName: participant.realName,
         isMomo: participant.isMomo,
+        isHost: participant.isHost || false,
+        joinedAt: participant.joinedAt,
         muted: participant.muted,
         cameraOff: participant.cameraOff,
         handRaised: participant.handRaised,
@@ -280,12 +290,13 @@ function MeetingRoomInner() {
       }
     });
 
-    // Handle user updates (momo toggle, etc.)
+    // Handle user updates (momo toggle, host promotion, etc.)
     const unsubUpdated = on("user-updated", (data: any) => {
-      updateParticipant(data.peerId, {
-        isMomo: data.isMomo,
-        userName: data.userName,
-      });
+      const updates: Partial<Participant> = {};
+      if (data.isMomo !== undefined) updates.isMomo = data.isMomo;
+      if (data.userName !== undefined) updates.userName = data.userName;
+      if (data.isHost !== undefined) updates.isHost = data.isHost;
+      updateParticipant(data.peerId, updates);
     });
 
     // Handle mute state changes
@@ -520,16 +531,60 @@ function MeetingRoomInner() {
     emit("stop-screen-share");
   }, [stopScreenShare, emit]);
 
+  // Determine host peerId from participant list (or self if we joined first)
+  const hostPeerId = useMemo(() => {
+    if (amHostRef.current) return peerId;
+    const host = participants.find((p) => p.isHost);
+    return host?.peerId || null;
+  }, [participants, peerId]);
+
   // Build local participant for display
   const localParticipant: Participant = {
     peerId,
     userName: isMomo ? "momo" : userName,
     realName: userName,
     isMomo,
+    isHost: hostPeerId === peerId,
     muted: isMuted,
     cameraOff: isCameraOff,
     handRaised,
   };
+
+  // Calculate which 4 participants get video: host > speaker > hand-raisers > join order
+  const videoPriorityPeerIds = useMemo(() => {
+    const maxSlots = 4;
+    const priority = new Set<string>();
+
+    // 1. Host always gets a slot
+    if (hostPeerId) priority.add(hostPeerId);
+
+    // 2. Current speaker gets a slot
+    if (speakingPeerId && speakingPeerId !== hostPeerId) {
+      priority.add(speakingPeerId);
+    }
+
+    // 3. Fill remaining slots by hand-raise first, then join order
+    const remaining = participants
+      .filter((p) => !priority.has(p.peerId))
+      .sort((a, b) => {
+        if (a.handRaised && !b.handRaised) return -1;
+        if (!a.handRaised && b.handRaised) return 1;
+        return (a.joinedAt || 0) - (b.joinedAt || 0);
+      });
+
+    for (const p of remaining) {
+      if (priority.size >= maxSlots) break;
+      priority.add(p.peerId);
+    }
+
+    // Always include local peer in case they aren't in priority yet
+    // (so local video always shows)
+    if (!priority.has(peerId) && priority.size < maxSlots) {
+      priority.add(peerId);
+    }
+
+    return Array.from(priority);
+  }, [participants, hostPeerId, speakingPeerId, peerId]);
 
   // Filter out local from participants list for display
   const remoteParticipants = participants.filter((p) => p.peerId !== peerId);
@@ -683,6 +738,7 @@ function MeetingRoomInner() {
             participants={remoteParticipants}
             speakingPeerId={speakingPeerId}
             focusPeerId={screenSharingPeerId || sharedContent?.sharedBy || null}
+            videoPriorityPeerIds={videoPriorityPeerIds}
           />
         </div>
 

@@ -62,11 +62,15 @@ io.on("connection", (socket) => {
     }
 
     const room = rooms.get(roomId);
+    const isHost = room.size === 0; // first joiner is host
+
     const participantInfo = {
       peerId,
       userName: isMomo ? "momo" : userName,
       realName: userName,
       isMomo,
+      isHost,
+      joinedAt: Date.now(),
       muted: false,
       cameraOff: false,
       handRaised: false,
@@ -330,10 +334,26 @@ io.on("connection", (socket) => {
     }
     if (currentRoom && rooms.has(currentRoom)) {
       const room = rooms.get(currentRoom);
+      const wasHost = room.get(currentPeerId)?.isHost;
       room.delete(currentPeerId);
+
       if (room.size === 0) {
         rooms.delete(currentRoom);
+      } else {
+        // If the host left, promote the earliest-remaining participant
+        if (wasHost) {
+          const firstRemaining = Array.from(room.entries())[0];
+          if (firstRemaining) {
+            const [newHostId, newHostInfo] = firstRemaining;
+            newHostInfo.isHost = true;
+            io.to(currentRoom).emit("user-updated", {
+              peerId: newHostId,
+              isHost: true,
+            });
+          }
+        }
       }
+
       io.to(currentRoom).emit("user-left", { peerId: currentPeerId });
       console.log(`[${currentRoom}] Peer ${currentPeerId} left. Remaining: ${room.size}`);
     }

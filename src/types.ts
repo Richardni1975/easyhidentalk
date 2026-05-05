@@ -3,6 +3,8 @@ export interface Participant {
   userName: string;
   realName: string;
   isMomo: boolean;
+  isHost: boolean;
+  joinedAt?: number;
   muted: boolean;
   cameraOff: boolean;
   handRaised: boolean;
