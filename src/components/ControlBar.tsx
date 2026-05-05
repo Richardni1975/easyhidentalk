@@ -4,6 +4,7 @@ interface ControlBarProps {
   handRaised: boolean;
   isMomo: boolean;
   isScreenSharing: boolean;
+  isListener?: boolean;
   onToggleMute: () => void;
   onToggleCamera: () => void;
   onToggleHandRaise: () => void;
@@ -18,6 +19,7 @@ export default function ControlBar({
   handRaised,
   isMomo,
   isScreenSharing,
+  isListener,
   onToggleMute,
   onToggleCamera,
   onToggleHandRaise,
@@ -40,9 +42,10 @@ export default function ControlBar({
         </svg>
       ),
       active: !isMuted,
-      onClick: onToggleMute,
-      label: isMuted ? "取消静音" : "静音",
+      onClick: isListener ? undefined : onToggleMute,
+      label: isListener ? "旁听模式，无法发言" : (isMuted ? "取消静音" : "静音"),
       danger: isMuted,
+      disabled: isListener,
     },
     {
       icon: isCameraOff ? (
@@ -55,9 +58,10 @@ export default function ControlBar({
         </svg>
       ),
       active: !isCameraOff,
-      onClick: onToggleCamera,
-      label: isCameraOff ? "开启摄像头" : "关闭摄像头",
+      onClick: isListener ? undefined : onToggleCamera,
+      label: isListener ? "旁听模式，无法开启摄像头" : (isCameraOff ? "开启摄像头" : "关闭摄像头"),
       danger: isCameraOff,
+      disabled: isListener,
     },
     {
       icon: <span className="text-lg">{handRaised ? "✋" : "🤚"}</span>,
@@ -96,12 +100,19 @@ export default function ControlBar({
 
   return (
     <div className="flex items-center justify-center gap-2 px-4 py-3 bg-dark-800/90 backdrop-blur-md rounded-2xl border border-dark-700 shadow-2xl">
+      {isListener && (
+        <span className="text-[10px] text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded-full mr-1">
+          👂 旁听模式
+        </span>
+      )}
       {buttons.map((btn, i) => (
         <div key={i} className="relative group">
           <button
-            onClick={btn.onClick}
+            onClick={btn.disabled ? undefined : btn.onClick}
             className={`${buttonBase} ${
-              btn.danger
+              btn.disabled
+                ? "bg-dark-800 text-dark-500 cursor-not-allowed"
+                : btn.danger
                 ? "bg-red-600 hover:bg-red-500 text-white"
                 : btn.momo
                 ? btn.active

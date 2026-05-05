@@ -12,6 +12,7 @@ import EmojiReactions from "../components/EmojiReactions";
 import type { Participant, ChatMessage, SharedContent, Poll } from "../types";
 import PollResultsModal from "../components/PollResultsModal";
 import PollBrowserModal from "../components/PollBrowserModal";
+import ContactList from "../components/ContactList";
 
 const EMOJIS = ["😀", "😂", "🎉", "❤️", "👍", "👋", "🔥", "🌟"];
 
@@ -52,7 +53,9 @@ function MeetingRoomInner() {
   const [viewingPoll, setViewingPoll] = useState<Poll | null>(null);
   const [showPollBrowser, setShowPollBrowser] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
   const amHostRef = useRef(false); // true if we joined an empty room
+  const [promotedPeerIds, setPromotedPeerIds] = useState<string[]>([]);
 
   const {
     localStream,
@@ -229,6 +232,15 @@ function MeetingRoomInner() {
       });
     });
 
+    // Sync promoted list
+    const unsubExistingPromoted = on("existing-promoted", ({ promotedPeerIds: list }: { promotedPeerIds: string[] }) => {
+      setPromotedPeerIds(list);
+    });
+
+    const unsubPromotedUpdated = on("promoted-updated", ({ promotedPeerIds: list }: { promotedPeerIds: string[] }) => {
+      setPromotedPeerIds(list);
+    });
+
     // Handle new user joining — DO NOT create offer here
     // New joiners initiate offers via existing-participants; glare would otherwise
     // leave both sides with unanswered offers and no working connection.
@@ -402,6 +414,8 @@ function MeetingRoomInner() {
 
     return () => {
       unsubExisting();
+      unsubExistingPromoted();
+      unsubPromotedUpdated();
       unsubJoined();
       unsubOffer();
       unsubAnswer();
@@ -531,6 +545,21 @@ function MeetingRoomInner() {
     emit("stop-screen-share");
   }, [stopScreenShare, emit]);
 
+  // Host promotion callback: promote an avatar-only participant
+  const handlePromote = useCallback(
+    (targetPeerId: string) => {
+      emit("promote-participant", { peerId: targetPeerId });
+    },
+    [emit]
+  );
+
+  const handleDemote = useCallback(
+    (targetPeerId: string) => {
+      emit("demote-participant", { peerId: targetPeerId });
+    },
+    [emit]
+  );
+
   // Determine host peerId from participant list (or self if we joined first)
   const hostPeerId = useMemo(() => {
     if (amHostRef.current) return peerId;
@@ -550,7 +579,7 @@ function MeetingRoomInner() {
     handRaised,
   };
 
-  // Calculate which 4 participants get video: host > speaker > hand-raisers > join order
+  // Calculate which 4 participants get video: host > promoted > speaker > hand-raisers > join order
   const videoPriorityPeerIds = useMemo(() => {
     const maxSlots = 4;
     const priority = new Set<string>();
@@ -558,12 +587,18 @@ function MeetingRoomInner() {
     // 1. Host always gets a slot
     if (hostPeerId) priority.add(hostPeerId);
 
-    // 2. Current speaker gets a slot
-    if (speakingPeerId && speakingPeerId !== hostPeerId) {
-      priority.add(speakingPeerId);
+    // 2. Host-promoted participants get slots (pinned by host)
+    for (const pid of promotedPeerIds) {
+      if (priority.size >= maxSlots) break;
+      priority.add(pid);
     }
 
-    // 3. Fill remaining slots by hand-raise first, then join order
+    // 3. Current speaker gets a slot (if not already in)
+    if (speakingPeerId && !priority.has(speakingPeerId)) {
+      if (priority.size < maxSlots) priority.add(speakingPeerId);
+    }
+
+    // 4. Fill remaining slots by hand-raise first, then join order
     const remaining = participants
       .filter((p) => !priority.has(p.peerId))
       .sort((a, b) => {
@@ -584,10 +619,32 @@ function MeetingRoomInner() {
     }
 
     return Array.from(priority);
-  }, [participants, hostPeerId, speakingPeerId, peerId]);
+  }, [participants, hostPeerId, speakingPeerId, peerId, promotedPeerIds]);
 
   // Filter out local from participants list for display
   const remoteParticipants = participants.filter((p) => p.peerId !== peerId);
+
+  // Determine if local user is restricted (listener mode — can't speak/show video)
+  const isListener = useMemo(() => {
+    if (hostPeerId === peerId) return false; // host always has full access
+    return !videoPriorityPeerIds.includes(peerId);
+  }, [videoPriorityPeerIds, hostPeerId, peerId]);
+
+  // Force mute and camera off when in listener mode
+  useEffect(() => {
+    if (isListener) {
+      if (!isMuted) {
+        setIsMuted(true);
+        toggleAudio(false);
+        emit("user-mute", { muted: true });
+      }
+      if (!isCameraOff) {
+        setIsCameraOff(true);
+        toggleVideo(false);
+        emit("user-camera", { cameraOff: true });
+      }
+    }
+  }, [isListener]);
 
   // Determine which screen share stream to display in center panel
   const activeScreenStream = useMemo(() => {
@@ -712,6 +769,17 @@ function MeetingRoomInner() {
               <span>投票 ({polls.length})</span>
             </button>
           )}
+          {/* Contacts / Invite button */}
+          {hostPeerId === peerId && (
+            <button
+              onClick={() => setShowContacts(true)}
+              className="px-2 py-1 rounded text-xs bg-dark-700 text-dark-300 hover:text-white hover:bg-dark-600 transition-colors flex items-center gap-1"
+              title="发送邀请"
+            >
+              <span>📧</span>
+              <span>邀请</span>
+            </button>
+          )}
           {/* Emoji picker */}
           <div className="flex gap-1">
             {EMOJIS.map((emoji) => (
@@ -739,6 +807,9 @@ function MeetingRoomInner() {
             speakingPeerId={speakingPeerId}
             focusPeerId={screenSharingPeerId || sharedContent?.sharedBy || null}
             videoPriorityPeerIds={videoPriorityPeerIds}
+            isHost={hostPeerId === peerId}
+            onPromote={handlePromote}
+            promotedPeerIds={promotedPeerIds}
           />
         </div>
 
@@ -810,6 +881,11 @@ function MeetingRoomInner() {
         <PollBrowserModal polls={polls} onClose={() => setShowPollBrowser(false)} />
       )}
 
+      {/* Contacts modal */}
+      {showContacts && (
+        <ContactList roomId={roomId || ""} onClose={() => setShowContacts(false)} />
+      )}
+
       {/* Poll results modal */}
       {viewingPoll && (
         <PollResultsModal poll={viewingPoll} onClose={() => setViewingPoll(null)} />
@@ -823,6 +899,7 @@ function MeetingRoomInner() {
           handRaised={handRaised}
           isMomo={isMomo}
           isScreenSharing={!!screenSharingPeerId}
+          isListener={isListener}
           onToggleMute={handleToggleMute}
           onToggleCamera={handleToggleCamera}
           onToggleHandRaise={handleToggleHandRaise}

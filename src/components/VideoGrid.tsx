@@ -11,6 +11,9 @@ interface VideoGridProps {
   speakingPeerId?: string | null;
   focusPeerId?: string | null;
   videoPriorityPeerIds?: string[];
+  isHost?: boolean;
+  onPromote?: (peerId: string) => void;
+  promotedPeerIds?: string[];
 }
 
 export default function VideoGrid({
@@ -21,11 +24,19 @@ export default function VideoGrid({
   speakingPeerId,
   focusPeerId,
   videoPriorityPeerIds,
+  isHost,
+  onPromote,
+  promotedPeerIds,
 }: VideoGridProps) {
   // Priority set defaults to all participants if not provided (backward compat)
   const prioritySet = useMemo(
     () => (videoPriorityPeerIds ? new Set(videoPriorityPeerIds) : null),
     [videoPriorityPeerIds]
+  );
+
+  const promotedSet = useMemo(
+    () => (promotedPeerIds ? new Set(promotedPeerIds) : new Set<string>()),
+    [promotedPeerIds]
   );
 
   const allParticipants = useMemo(() => {
@@ -147,8 +158,11 @@ export default function VideoGrid({
                 )}
               </span>
 
-              {/* Status icons */}
+              {/* Status icons and promote button */}
               <div className="flex items-center gap-1 flex-shrink-0">
+                {promotedSet.has(p.peerId) && (
+                  <span className="text-[10px] bg-blue-600/60 text-blue-200 px-1.5 py-0.5 rounded">已提升</span>
+                )}
                 {p.handRaised && <span className="text-yellow-400 text-xs">✋</span>}
                 {!p.muted ? (
                   <svg className="w-3 h-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -158,6 +172,15 @@ export default function VideoGrid({
                   <svg className="w-3 h-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                   </svg>
+                )}
+                {isHost && onPromote && !promotedSet.has(p.peerId) && (
+                  <button
+                    onClick={() => onPromote(p.peerId)}
+                    className="text-[10px] bg-purple-600/60 text-purple-200 px-1.5 py-0.5 rounded hover:bg-purple-500/80 transition-colors ml-1"
+                    title="提升为发言人（获得视频画面和发言权）"
+                  >
+                    提升
+                  </button>
                 )}
               </div>
             </div>

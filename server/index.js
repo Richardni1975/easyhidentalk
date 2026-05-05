@@ -26,6 +26,7 @@ app.get("*", (req, res) => {
 const rooms = new Map(); // roomId -> Map of peerId -> participantInfo
 const roomPolls = new Map(); // roomId -> Map of pollId -> pollData
 const roomMessages = new Map(); // roomId -> array of chat messages
+const roomPromoted = new Map(); // roomId -> string[] of promoted peerIds
 
 // Map peerId -> socket.id for direct messaging (offer/answer/ICE)
 const peerSockets = new Map();
@@ -84,6 +85,9 @@ io.on("connection", (socket) => {
       .map(([id, info]) => ({ peerId: id, ...info }));
 
     socket.emit("existing-participants", existingParticipants);
+
+    // Send promoted list to new joiner
+    socket.emit("existing-promoted", { promotedPeerIds: roomPromoted.get(roomId) || [] });
 
     // Send existing polls to the new joiner (anonymize momo-mode polls)
     const existingPolls = roomPolls.get(roomId);
@@ -255,6 +259,40 @@ io.on("connection", (socket) => {
     });
   });
 
+  // --- Host promotion events ---
+
+  socket.on("promote-participant", ({ peerId: targetPeerId }) => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    const sender = room?.get(currentPeerId);
+    if (!sender || !sender.isHost) return;
+    if (targetPeerId === currentPeerId) return; // can't promote self
+
+    if (!roomPromoted.has(currentRoom)) {
+      roomPromoted.set(currentRoom, []);
+    }
+    const promoted = roomPromoted.get(currentRoom);
+    if (!promoted.includes(targetPeerId)) {
+      promoted.push(targetPeerId);
+      io.to(currentRoom).emit("promoted-updated", { promotedPeerIds: [...promoted] });
+      console.log(`[${currentRoom}] Host promoted ${targetPeerId}`);
+    }
+  });
+
+  socket.on("demote-participant", ({ peerId: targetPeerId }) => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    const sender = room?.get(currentPeerId);
+    if (!sender || !sender.isHost) return;
+
+    const promoted = roomPromoted.get(currentRoom);
+    if (!promoted) return;
+    const filtered = promoted.filter((id) => id !== targetPeerId);
+    roomPromoted.set(currentRoom, filtered);
+    io.to(currentRoom).emit("promoted-updated", { promotedPeerIds: filtered });
+    console.log(`[${currentRoom}] Host demoted ${targetPeerId}`);
+  });
+
   // --- Poll events ---
 
   socket.on("create-poll", ({ question, optionsTexts, votingMode }) => {
@@ -337,8 +375,19 @@ io.on("connection", (socket) => {
       const wasHost = room.get(currentPeerId)?.isHost;
       room.delete(currentPeerId);
 
+      // Remove from promoted list
+      if (roomPromoted.has(currentRoom)) {
+        const promoted = roomPromoted.get(currentRoom);
+        const filtered = promoted.filter((id) => id !== currentPeerId);
+        if (filtered.length !== promoted.length) {
+          roomPromoted.set(currentRoom, filtered);
+          io.to(currentRoom).emit("promoted-updated", { promotedPeerIds: filtered });
+        }
+      }
+
       if (room.size === 0) {
         rooms.delete(currentRoom);
+        roomPromoted.delete(currentRoom);
       } else {
         // If the host left, promote the earliest-remaining participant
         if (wasHost) {
