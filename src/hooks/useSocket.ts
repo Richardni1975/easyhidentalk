@@ -1,9 +1,10 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { SIGNALING_SERVER_URL } from "../utils/constants";
 
 export function useSocket(roomId: string | undefined) {
   const socketRef = useRef<Socket | null>(null);
+  const [socketConnected, setSocketConnected] = useState(false);
 
   useEffect(() => {
     if (!roomId) return;
@@ -13,9 +14,27 @@ export function useSocket(roomId: string | undefined) {
     });
     socketRef.current = socket;
 
+    socket.on("connect", () => {
+      console.log("Socket.IO connected:", socket.id);
+      setSocketConnected(true);
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("Socket.IO connection error:", err.message);
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.log("Socket.IO disconnected:", reason);
+      setSocketConnected(false);
+    });
+
     return () => {
+      socket.off("connect");
+      socket.off("connect_error");
+      socket.off("disconnect");
       socket.disconnect();
       socketRef.current = null;
+      setSocketConnected(false);
     };
   }, [roomId]);
 
@@ -37,5 +56,5 @@ export function useSocket(roomId: string | undefined) {
     socketRef.current?.off(event, handler);
   }, []);
 
-  return { socket: socketRef, emit, on, off };
+  return { socket: socketRef, emit, on, off, socketConnected };
 }

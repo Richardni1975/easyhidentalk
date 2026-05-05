@@ -77,7 +77,7 @@ function MeetingRoomInner() {
     cleanupAll,
   } = useWebRTC();
 
-  const { emit, on } = useSocket(roomId);
+  const { emit, on, socketConnected } = useSocket(roomId);
   const { createPitchShiftedStream, setPitchEnabled, cleanup: cleanupAudio } = useAudioEffects();
 
   const state = location.state as {
@@ -174,9 +174,12 @@ function MeetingRoomInner() {
 
   // Socket event handlers - set up after connection
   useEffect(() => {
-    if (!connected || !roomId || !localStream) return;
+    if (!connected || !roomId || !socketConnected) return;
+
+    const stream = localStream || new MediaStream(); // fallback empty stream
 
     // Join room
+    console.log("Joining room via socket:", socketConnected, roomId, peerId);
     emit("join-room", {
       roomId,
       peerId,
@@ -208,7 +211,7 @@ function MeetingRoomInner() {
       participantsList.forEach((p) => {
         const pc = createPeerConnection(
           p.peerId,
-          localStream,
+          stream,
           (peerId, candidate) => {
             emit("ice-candidate", { to: peerId, candidate });
           },
@@ -264,7 +267,7 @@ function MeetingRoomInner() {
       // Ensure we have a peer connection for this peer
       createPeerConnection(
         from,
-        localStream,
+        stream,
         (peerId, candidate) => {
           emit("ice-candidate", { to: peerId, candidate });
         },
@@ -438,7 +441,7 @@ function MeetingRoomInner() {
       unsubExistingPolls();
       unsubExistingMsgs();
     };
-  }, [connected, roomId, localStream, sharedContent, screenSharingPeerId]);
+  }, [connected, roomId, localStream, socketConnected, sharedContent, screenSharingPeerId]);
 
   const handleToggleMute = useCallback(() => {
     const newMuted = !isMuted;
