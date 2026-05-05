@@ -82,8 +82,13 @@ function MeetingRoomInner() {
     videoEnabled?: boolean;
   } | null;
 
-  // Initialize: set room info and start local stream
+  // Redirect to premeeting if accessed directly without state
   useEffect(() => {
+    if (roomId && !state) {
+      navigate(`/premeeting/${roomId}`, { replace: true });
+      return;
+    }
+
     if (!roomId || !state) return;
 
     setRoomId(roomId);
