@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: video-meeting
+    env: node
+    region: singapore
+    buildCommand: npm install && npm run build
+    startCommand: npm start
