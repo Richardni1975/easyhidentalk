@@ -15,6 +15,9 @@ export function useWebRTC() {
     Map<string, MediaStream>
   >(new Map());
 
+  // Buffer ICE candidates that arrive before the PC is created
+  const pendingIceCandidates = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+
   // Screen share state
   const mainStreamIdPerPeerRef = useRef<Map<string, string>>(new Map());
   const screenSenders = useRef<Map<string, RTCRtpSender>>(new Map());
@@ -60,6 +63,7 @@ export function useWebRTC() {
       if (existing) {
         existing.pc.close();
         peerConnections.current.delete(peerId);
+        pendingIceCandidates.current.delete(peerId);
         mainStreamIdPerPeerRef.current.delete(peerId);
         screenShareStreamsRef.current.delete(peerId);
         screenSenders.current.delete(peerId);
@@ -144,6 +148,16 @@ export function useWebRTC() {
       };
 
       peerConnections.current.set(peerId, { pc });
+
+      // Drain any ICE candidates that arrived before the PC was created
+      const pending = pendingIceCandidates.current.get(peerId);
+      if (pending) {
+        pendingIceCandidates.current.delete(peerId);
+        for (const candidate of pending) {
+          pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+        }
+      }
+
       return pc;
     },
     []
@@ -286,7 +300,13 @@ export function useWebRTC() {
   const addIceCandidate = useCallback(
     async (peerId: string, candidate: RTCIceCandidateInit) => {
       const pc = peerConnections.current.get(peerId)?.pc;
-      if (!pc) return;
+      if (!pc) {
+        // PC not yet created — buffer the candidate so it's applied later
+        const buf = pendingIceCandidates.current.get(peerId) || [];
+        buf.push(candidate);
+        pendingIceCandidates.current.set(peerId, buf);
+        return;
+      }
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
@@ -306,6 +326,7 @@ export function useWebRTC() {
       localScreenStreamRef.current.getTracks().forEach((t) => t.stop());
       localScreenStreamRef.current = null;
     }
+    pendingIceCandidates.current.clear();
     screenSenders.current.clear();
     mainStreamIdPerPeerRef.current.clear();
     screenShareStreamsRef.current.clear();

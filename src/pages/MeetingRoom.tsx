@@ -576,18 +576,53 @@ function MeetingRoomInner() {
     setViewingPoll(poll);
   }, []);
 
-  // Track audio levels for speaking indicator (simplified)
+  // Track audio levels for speaking indicator
   useEffect(() => {
     if (!localStream) return;
-    // Simple speaking detection based on local audio
     const audioTrack = localStream.getAudioTracks()[0];
     if (!audioTrack) return;
 
-    // Use audio level via a simple interval (simplified approach)
-    // In a real app we'd use RTCRtpReceiver stats or AudioContext analyzer
-    const interval = setInterval(() => {}, 500);
-    return () => clearInterval(interval);
-  }, [localStream]);
+    let audioCtx: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let source: MediaStreamAudioSourceNode | null = null;
+    let animId: number | null = null;
+    let speaking = false;
+
+    try {
+      audioCtx = new AudioContext();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source = audioCtx.createMediaStreamSource(localStream);
+      source.connect(analyser);
+    } catch {
+      return; // AudioContext not supported
+    }
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    function detect() {
+      if (!analyser) return;
+      analyser.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
+      const isSpeaking = avg > 10; // threshold
+
+      if (isSpeaking !== speaking) {
+        speaking = isSpeaking;
+        setSpeakingPeerId(isSpeaking ? peerId : null);
+      }
+
+      animId = requestAnimationFrame(detect);
+    }
+
+    detect();
+
+    return () => {
+      if (animId !== null) cancelAnimationFrame(animId);
+      source?.disconnect();
+      audioCtx?.close();
+    };
+  }, [localStream, peerId]);
 
   return (
     <div className="h-screen w-screen bg-dark-950 flex flex-col">
