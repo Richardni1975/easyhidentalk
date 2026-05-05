@@ -27,6 +27,9 @@ const rooms = new Map(); // roomId -> Map of peerId -> participantInfo
 const roomPolls = new Map(); // roomId -> Map of pollId -> pollData
 const roomMessages = new Map(); // roomId -> array of chat messages
 
+// Map peerId -> socket.id for direct messaging (offer/answer/ICE)
+const peerSockets = new Map();
+
 // Helper: anonymize poll votes for momo mode broadcast
 function anonymizePoll(poll) {
   if (poll.votingMode !== "momo") return poll;
@@ -52,6 +55,7 @@ io.on("connection", (socket) => {
     currentPeerId = peerId;
 
     socket.join(roomId);
+    peerSockets.set(peerId, socket.id); // map peerId -> socket.id for direct messages
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -97,15 +101,24 @@ io.on("connection", (socket) => {
   });
 
   socket.on("offer", ({ to, offer }) => {
-    io.to(to).emit("offer", { from: currentPeerId, offer });
+    const targetSocketId = peerSockets.get(to);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("offer", { from: currentPeerId, offer });
+    }
   });
 
   socket.on("answer", ({ to, answer }) => {
-    io.to(to).emit("answer", { from: currentPeerId, answer });
+    const targetSocketId = peerSockets.get(to);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("answer", { from: currentPeerId, answer });
+    }
   });
 
   socket.on("ice-candidate", ({ to, candidate }) => {
-    io.to(to).emit("ice-candidate", { from: currentPeerId, candidate });
+    const targetSocketId = peerSockets.get(to);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("ice-candidate", { from: currentPeerId, candidate });
+    }
   });
 
   socket.on("chat-message", ({ text }) => {
@@ -312,6 +325,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    if (currentPeerId) {
+      peerSockets.delete(currentPeerId);
+    }
     if (currentRoom && rooms.has(currentRoom)) {
       const room = rooms.get(currentRoom);
       room.delete(currentPeerId);
