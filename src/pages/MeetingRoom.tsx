@@ -51,6 +51,7 @@ function MeetingRoomInner() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [viewingPoll, setViewingPoll] = useState<Poll | null>(null);
   const [showPollBrowser, setShowPollBrowser] = useState(false);
+  const [showMobileChat, setShowMobileChat] = useState(false);
 
   const {
     localStream,
@@ -220,7 +221,9 @@ function MeetingRoomInner() {
       });
     });
 
-    // Handle new user joining
+    // Handle new user joining — DO NOT create offer here
+    // New joiners initiate offers via existing-participants; glare would otherwise
+    // leave both sides with unanswered offers and no working connection.
     const unsubJoined = on("user-joined", (participant: any) => {
       const newParticipant: Participant = {
         peerId: participant.peerId,
@@ -232,28 +235,6 @@ function MeetingRoomInner() {
         handRaised: participant.handRaised,
       };
       addParticipant(newParticipant);
-
-      // Create peer connection and send offer
-      const pc = createPeerConnection(
-        participant.peerId,
-        localStream,
-        (peerId, candidate) => {
-          emit("ice-candidate", { to: peerId, candidate });
-        },
-        (peerId, stream) => {},
-        (peerId, state) => {
-          if (state === "disconnected" || state === "failed") {
-            removeParticipant(peerId);
-          }
-        },
-        (peerId, stream) => {
-          // onScreenTrack — handled by screenShareStreams state inside useWebRTC
-        }
-      );
-
-      createOffer(participant.peerId).then((offer) => {
-        if (offer) emit("offer", { to: participant.peerId, offer });
-      });
     });
 
     // Handle WebRTC offers
@@ -622,6 +603,14 @@ function MeetingRoomInner() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Mobile chat toggle */}
+          <button
+            onClick={() => setShowMobileChat(!showMobileChat)}
+            className="md:hidden px-2 py-1 rounded text-xs bg-dark-700 text-dark-300 hover:text-white transition-colors"
+            title={showMobileChat ? "关闭聊天" : "打开聊天"}
+          >
+            {showMobileChat ? "✕ 视频" : "💬 聊天"}
+          </button>
           {/* Poll browser button */}
           {polls.length > 0 && (
             <button
@@ -649,9 +638,9 @@ function MeetingRoomInner() {
       </div>
 
       {/* Three-column main content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left column: video grid (25%) */}
-        <div className="w-1/4 min-w-0 flex flex-col">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        {/* Left column: video grid (25%, full on mobile) */}
+        <div className="md:w-1/4 w-full min-h-0 md:min-w-0 flex-1 md:flex-none flex flex-col">
           <VideoGrid
             localParticipant={localParticipant}
             localStream={localStream}
@@ -662,8 +651,8 @@ function MeetingRoomInner() {
           />
         </div>
 
-        {/* Center column: media share panel (50%) */}
-        <div className="w-1/2 min-w-0 border-x border-dark-700 flex flex-col">
+        {/* Center column: media share panel (50%, hidden on mobile unless active) */}
+        <div className={`md:w-1/2 w-full min-w-0 md:min-w-0 border-t md:border-t-0 md:border-x border-dark-700 flex flex-col ${!activeScreenStream && !sharedContent ? "hidden md:flex" : ""}`}>
           <MediaSharePanel
             sharedContent={sharedContent}
             onShareUrl={handleShareUrl}
@@ -678,8 +667,8 @@ function MeetingRoomInner() {
           />
         </div>
 
-        {/* Right column: chat panel (25%) */}
-        <div className="w-1/4 min-w-0 flex flex-col">
+        {/* Right column: chat panel (25%), hidden on mobile, toggle via button */}
+        <div className="md:w-1/4 w-full min-w-0 md:min-w-0 border-t md:border-t-0 border-dark-700 flex flex-col hidden md:flex">
           <ChatPanel
             messages={chatMessages}
             onSend={handleSendChat}
@@ -693,6 +682,34 @@ function MeetingRoomInner() {
           />
         </div>
       </div>
+
+      {/* Mobile chat overlay */}
+      {showMobileChat && (
+        <div className="md:hidden fixed inset-0 z-50 bg-dark-950/95 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2 border-b border-dark-700">
+            <span className="text-white text-sm font-medium">聊天与投票</span>
+            <button
+              onClick={() => setShowMobileChat(false)}
+              className="text-dark-400 hover:text-white text-sm px-2 py-1"
+            >
+              关闭
+            </button>
+          </div>
+          <div className="flex-1 min-h-0">
+            <ChatPanel
+              messages={chatMessages}
+              onSend={handleSendChat}
+              currentPeerId={peerId}
+              isMomo={isMomo}
+              polls={polls}
+              onCreatePoll={handleCreatePoll}
+              onVotePoll={handleVotePoll}
+              onClosePoll={handleClosePoll}
+              onViewResults={handleViewResults}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Emoji reactions overlay */}
       <EmojiReactions events={emojiEvents} />

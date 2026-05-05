@@ -198,6 +198,7 @@ export function useWebRTC() {
           height: { ideal: 1080 },
           frameRate: { ideal: 30 },
         },
+        audio: true,
       });
 
       localScreenStreamRef.current = screenStream;
