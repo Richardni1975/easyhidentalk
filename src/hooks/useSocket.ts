@@ -15,10 +15,17 @@ export function useSocket(roomId: string | undefined) {
     });
     socketRef.current = socket;
 
+    let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+
     socket.on("connect", () => {
       console.log("Socket.IO connected:", socket.id);
       setSocketConnected(true);
       setConnectCount((c) => c + 1);
+
+      // Send keep-alive every 5 seconds to prevent Render proxy timeout
+      keepaliveTimer = setInterval(() => {
+        socket.emit("keepalive");
+      }, 5000);
     });
 
     socket.on("connect_error", (err) => {
@@ -28,12 +35,20 @@ export function useSocket(roomId: string | undefined) {
     socket.on("disconnect", (reason) => {
       console.log("Socket.IO disconnected:", reason);
       setSocketConnected(false);
+      if (keepaliveTimer) {
+        clearInterval(keepaliveTimer);
+        keepaliveTimer = null;
+      }
     });
 
     return () => {
       socket.off("connect");
       socket.off("connect_error");
       socket.off("disconnect");
+      if (keepaliveTimer) {
+        clearInterval(keepaliveTimer);
+        keepaliveTimer = null;
+      }
       socket.disconnect();
       socketRef.current = null;
       setSocketConnected(false);

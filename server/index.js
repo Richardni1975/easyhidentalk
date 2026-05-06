@@ -399,6 +399,11 @@ io.on("connection", (socket) => {
     io.to(currentRoom).emit("poll-closed", anonymizePoll(poll));
   });
 
+  // Keep-alive: prevents Render proxy from closing "idle" WebSocket connections
+  socket.on("keepalive", () => {
+    // no-op — receiving the event is enough to show data activity
+  });
+
   socket.on("disconnect", (reason) => {
     console.log(`[Socket] ${currentPeerId} disconnected. Reason: ${reason}`);
     if (currentPeerId) {

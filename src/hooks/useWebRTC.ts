@@ -205,10 +205,14 @@ export function useWebRTC() {
 
     peerConnections.current.forEach(({ pc }, peerId) => {
       if (screenSenders.current.has(peerId)) return;
-      const screenMediaStream = new MediaStream([screenTrack]);
-      const sender = pc.addTrack(screenTrack, screenMediaStream);
-      if (sender) {
-        screenSenders.current.set(peerId, sender);
+      try {
+        const screenMediaStream = new MediaStream([screenTrack]);
+        const sender = pc.addTrack(screenTrack, screenMediaStream);
+        if (sender) {
+          screenSenders.current.set(peerId, sender);
+        }
+      } catch (err) {
+        console.warn(`Failed to add screen track to peer ${peerId}:`, err);
       }
     });
   }, []);
@@ -227,15 +231,19 @@ export function useWebRTC() {
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 15 },
         },
-        audio: true,
+        audio: false,
       });
 
       localScreenStreamRef.current = screenStream;
-      addScreenTrack(screenStream);
+      try {
+        addScreenTrack(screenStream);
+      } catch (trackErr) {
+        console.error("addScreenTrack error:", trackErr);
+      }
       setLocalScreenStream(screenStream);
 
       screenStream.getVideoTracks()[0].onended = () => {
