@@ -38,10 +38,9 @@ const roomPolls = new Map(); // roomId -> Map of pollId -> pollData
 const roomMessages = new Map(); // roomId -> array of chat messages
 const roomPromoted = new Map(); // roomId -> string[] of promoted peerIds
 
-// Map peerId -> socket.id for direct messaging (offer/answer/ICE)
-const peerSockets = new Map();
+// Track pending removals (grace period before actually removing a participant)
+const pendingRemovals = new Map(); // peerId -> { timeout, roomId }
 
-// Helper: anonymize poll votes for momo mode broadcast
 function anonymizePoll(poll) {
   if (poll.votingMode !== "momo") return poll;
   return {
@@ -81,7 +80,19 @@ io.on("connection", (socket) => {
     }
 
     const room = rooms.get(roomId);
-    const isHost = room.size === 0; // first joiner is host
+    const alreadyInRoom = room.has(peerId);
+
+    // If this is a reconnection, cancel the pending removal
+    if (alreadyInRoom) {
+      const pending = pendingRemovals.get(peerId);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        pendingRemovals.delete(peerId);
+        console.log(`[${roomId}] ${userName} (${peerId}) reconnected within grace period`);
+      }
+    }
+
+    const isHost = !alreadyInRoom && room.size === 0; // first joiner is host, or reconnect keeps existing role
 
     const participantInfo = {
       peerId,
@@ -89,7 +100,7 @@ io.on("connection", (socket) => {
       realName: userName,
       isMomo,
       isHost,
-      joinedAt: Date.now(),
+      joinedAt: alreadyInRoom ? room.get(peerId).joinedAt : Date.now(),
       muted: false,
       cameraOff: false,
       handRaised: false,
@@ -120,8 +131,10 @@ io.on("connection", (socket) => {
       socket.emit("existing-messages", existingMsgs);
     }
 
-    // Notify others that someone joined
-    socket.to(roomId).emit("user-joined", participantInfo);
+    // Notify others only if this is a fresh join, not a reconnect
+    if (!alreadyInRoom) {
+      socket.to(roomId).emit("user-joined", participantInfo);
+    }
 
     console.log(`[${roomId}] ${userName} (${peerId}) joined. Total: ${room.size}`);
   });
@@ -391,39 +404,54 @@ io.on("connection", (socket) => {
     }
     if (currentRoom && rooms.has(currentRoom)) {
       const room = rooms.get(currentRoom);
-      const wasHost = room.get(currentPeerId)?.isHost;
-      room.delete(currentPeerId);
+      const peerId = currentPeerId;
 
-      // Remove from promoted list
-      if (roomPromoted.has(currentRoom)) {
-        const promoted = roomPromoted.get(currentRoom);
-        const filtered = promoted.filter((id) => id !== currentPeerId);
-        if (filtered.length !== promoted.length) {
-          roomPromoted.set(currentRoom, filtered);
-          io.to(currentRoom).emit("promoted-updated", { promotedPeerIds: filtered });
-        }
-      }
+      // Grace period: wait before actually removing the participant.
+      // If the client reconnects within 5 seconds, the removal is cancelled.
+      const pending = pendingRemovals.get(peerId);
+      if (pending) clearTimeout(pending.timeout);
 
-      if (room.size === 0) {
-        rooms.delete(currentRoom);
-        roomPromoted.delete(currentRoom);
-      } else {
-        // If the host left, promote the earliest-remaining participant
-        if (wasHost) {
-          const firstRemaining = Array.from(room.entries())[0];
-          if (firstRemaining) {
-            const [newHostId, newHostInfo] = firstRemaining;
-            newHostInfo.isHost = true;
-            io.to(currentRoom).emit("user-updated", {
-              peerId: newHostId,
-              isHost: true,
-            });
+      const removalTimeout = setTimeout(() => {
+        pendingRemovals.delete(peerId);
+        if (!rooms.has(currentRoom)) return;
+        if (!room.has(peerId)) return;
+
+        const wasHost = room.get(peerId)?.isHost;
+        room.delete(peerId);
+
+        // Remove from promoted list
+        if (roomPromoted.has(currentRoom)) {
+          const promoted = roomPromoted.get(currentRoom);
+          const filtered = promoted.filter((id) => id !== peerId);
+          if (filtered.length !== promoted.length) {
+            roomPromoted.set(currentRoom, filtered);
+            io.to(currentRoom).emit("promoted-updated", { promotedPeerIds: filtered });
           }
         }
-      }
 
-      io.to(currentRoom).emit("user-left", { peerId: currentPeerId });
-      console.log(`[${currentRoom}] Peer ${currentPeerId} left. Remaining: ${room.size}`);
+        if (room.size === 0) {
+          rooms.delete(currentRoom);
+          roomPromoted.delete(currentRoom);
+        } else {
+          // If the host left, promote the earliest-remaining participant
+          if (wasHost) {
+            const firstRemaining = Array.from(room.entries())[0];
+            if (firstRemaining) {
+              const [newHostId, newHostInfo] = firstRemaining;
+              newHostInfo.isHost = true;
+              io.to(currentRoom).emit("user-updated", {
+                peerId: newHostId,
+                isHost: true,
+              });
+            }
+          }
+        }
+
+        io.to(currentRoom).emit("user-left", { peerId });
+        console.log(`[${currentRoom}] Peer ${peerId} left. Remaining: ${room.size}`);
+      }, 5000);
+
+      pendingRemovals.set(peerId, { timeout: removalTimeout, roomId: currentRoom });
     }
   });
 });
