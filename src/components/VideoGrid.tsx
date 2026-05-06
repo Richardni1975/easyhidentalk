@@ -11,8 +11,6 @@ interface VideoGridProps {
   speakingPeerId?: string | null;
   videoPriorityPeerIds?: string[];
   screenSharing?: boolean;
-  bgEffect?: string;
-  bgImage?: HTMLImageElement | null;
 }
 
 export default function VideoGrid({
@@ -23,8 +21,6 @@ export default function VideoGrid({
   speakingPeerId,
   videoPriorityPeerIds,
   screenSharing,
-  bgEffect,
-  bgImage,
 }: VideoGridProps) {
   const prioritySet = useMemo(
     () => (videoPriorityPeerIds ? new Set(videoPriorityPeerIds) : null),
@@ -114,10 +110,6 @@ export default function VideoGrid({
               }
               isLocal={p.peerId === localParticipant.peerId}
               isSpeaking={p.peerId === speakingPeerId}
-              bgEffect={
-                p.peerId === localParticipant.peerId ? bgEffect : "off"
-              }
-              bgImage={bgImage}
             />
           ))}
         </div>

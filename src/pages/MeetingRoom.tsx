@@ -6,7 +6,7 @@ import { useWebRTC } from "../hooks/useWebRTC";
 import VideoGrid from "../components/VideoGrid";
 import ControlBar from "../components/ControlBar";
 import ChatPanel from "../components/ChatPanel";
-import type { Participant, ChatMessage, Poll, BgEffect } from "../types";
+import type { Participant, ChatMessage, Poll } from "../types";
 import PollResultsModal from "../components/PollResultsModal";
 import PollBrowserModal from "../components/PollBrowserModal";
 
@@ -43,8 +43,6 @@ function MeetingRoomInner() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [viewingPoll, setViewingPoll] = useState<Poll | null>(null);
   const [showPollBrowser, setShowPollBrowser] = useState(false);
-  const [bgEffect, setBgEffect] = useState<BgEffect>("off");
-  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const amHostRef = useRef(false);
 
   const {
@@ -59,6 +57,8 @@ function MeetingRoomInner() {
     clearScreenShareStream,
     toggleAudio,
     toggleVideo,
+    stopAudioTrackForStt,
+    restartAudioTrackForStt,
     createOffer,
     handleOffer,
     handleAnswer,
@@ -353,17 +353,22 @@ function MeetingRoomInner() {
     (active: boolean) => {
       if (active) {
         preSttMuteRef.current = isMuted;
-        toggleAudio(false);
+        // Fully release the mic so STT (SpeechRecognition) can access it
+        stopAudioTrackForStt();
         setIsMuted(true);
         emit("user-mute", { muted: true });
       } else {
         const restoreMuted = preSttMuteRef.current;
-        toggleAudio(!restoreMuted);
-        setIsMuted(restoreMuted);
-        emit("user-mute", { muted: restoreMuted });
+        // Recreate the audio track and re-add to all peer connections
+        restartAudioTrackForStt().then(() => {
+          if (!restoreMuted) {
+            setIsMuted(false);
+            emit("user-mute", { muted: false });
+          }
+        });
       }
     },
-    [isMuted, toggleAudio, setIsMuted, emit]
+    [isMuted, stopAudioTrackForStt, restartAudioTrackForStt, setIsMuted, emit]
   );
 
   // Host determination
@@ -464,11 +469,6 @@ function MeetingRoomInner() {
     emit("momo-toggle", { isMomo: newMomo });
   }, [isMomo, setIsMomo, emit]);
 
-  const handleBgEffectChange = useCallback((effect: BgEffect, image?: HTMLImageElement) => {
-    setBgEffect(effect);
-    if (image) setBgImage(image);
-  }, []);
-
   return (
     <div className="h-screen w-screen bg-dark-950 flex flex-col">
       {/* Top bar */}
@@ -494,8 +494,8 @@ function MeetingRoomInner() {
         </div>
       </div>
 
-      {/* Main swipeable area — mobile: scroll-snap, desktop: side-by-side */}
-      <div className="flex-1 flex overflow-x-auto md:overflow-hidden snap-x snap-mandatory min-h-0">
+      {/* Main swipeable area — mobile: horizontal snap only, no vertical scroll */}
+      <div className="flex-1 flex overflow-x-auto overflow-y-hidden md:overflow-hidden snap-x snap-mandatory min-h-0 overscroll-x-contain overscroll-y-none">
         {/* LEFT: Video panel */}
         <div className="w-full md:w-1/2 flex-shrink-0 snap-start flex flex-col min-h-0">
           {/* Video content */}
@@ -535,8 +535,6 @@ function MeetingRoomInner() {
                   speakingPeerId={speakingPeerId}
                   videoPriorityPeerIds={videoPriorityPeerIds}
                   screenSharing={true}
-                  bgEffect={bgEffect}
-                bgImage={bgImage}
                 />
               </div>
             ) : (
@@ -547,8 +545,6 @@ function MeetingRoomInner() {
                 participants={remoteParticipants}
                 speakingPeerId={speakingPeerId}
                 videoPriorityPeerIds={videoPriorityPeerIds}
-                bgEffect={bgEffect}
-                bgImage={bgImage}
               />
             )}
           </div>
@@ -566,14 +562,12 @@ function MeetingRoomInner() {
               onToggleScreenShare={handleToggleScreenShare}
               onHangUp={handleHangUp}
               vertical={false}
-              bgEffect={bgEffect}
-              onBgEffectChange={handleBgEffectChange}
             />
           </div>
         </div>
 
         {/* DESKTOP: Vertical control buttons */}
-        <div className="hidden md:flex flex-col items-center justify-center flex-shrink-0 w-14 bg-dark-900/50 border-l border-r border-dark-800/50">
+        <div className="hidden md:flex flex-col items-center justify-center flex-shrink-0 w-16 bg-dark-900/50 border-l border-r border-dark-800/50">
           <ControlBar
             isMuted={isMuted}
             isCameraOff={isCameraOff}
@@ -585,8 +579,6 @@ function MeetingRoomInner() {
             onToggleScreenShare={handleToggleScreenShare}
             onHangUp={handleHangUp}
             vertical={true}
-            bgEffect={bgEffect}
-            onBgEffectChange={handleBgEffectChange}
           />
         </div>
 

@@ -39,6 +39,3 @@ export interface Poll {
   timestamp: number;
   votingMode: "momo" | "real" | "mixed";
 }
-
-/** Virtual‑background effect mode */
-export type BgEffect = "off" | "remove" | "blur" | "image";

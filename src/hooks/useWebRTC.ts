@@ -31,9 +31,9 @@ export function useWebRTC() {
   const startLocalStream = useCallback(async () => {
     const constraints: MediaStreamConstraints = {
       audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
+        echoCancellation: { exact: true },
+        noiseSuppression: { exact: true },
+        autoGainControl: { exact: true },
       },
       video: {
         width: { ideal: 640 },
@@ -259,6 +259,52 @@ export function useWebRTC() {
     []
   );
 
+  /** Fully stop the audio track so the mic is released (needed for STT on mobile) */
+  const stopAudioTrackForStt = useCallback(() => {
+    const stream = localStreamRef.current;
+    if (!stream) return;
+    stream.getAudioTracks().forEach((track) => {
+      track.stop();
+      stream.removeTrack(track);
+    });
+    // Tell all peers we're not sending audio anymore
+    peerConnections.current.forEach(({ pc }) => {
+      const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+      if (sender) {
+        sender.replaceTrack(null).catch(() => {});
+      }
+    });
+  }, []);
+
+  /** Recreate the audio track after STT finishes */
+  const restartAudioTrackForStt = useCallback(async () => {
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: { exact: true },
+          noiseSuppression: { exact: true },
+          autoGainControl: { exact: true },
+        },
+      });
+      const newTrack = newStream.getAudioTracks()[0];
+      const stream = localStreamRef.current;
+      if (stream) {
+        stream.addTrack(newTrack);
+        peerConnections.current.forEach(({ pc }) => {
+          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+          if (sender) {
+            sender.replaceTrack(newTrack).catch(() => {});
+          }
+        });
+        // Update the React state so the UI picks up the new stream
+        setLocalStream(new MediaStream(stream.getTracks()));
+      }
+      return newTrack;
+    } catch (err) {
+      console.warn("Failed to restart audio after STT:", err);
+    }
+  }, []);
+
   const toggleVideo = useCallback(
     (enabled: boolean) => {
       localStreamRef.current?.getVideoTracks().forEach((track) => {
@@ -350,6 +396,8 @@ export function useWebRTC() {
     clearScreenShareStream,
     toggleAudio,
     toggleVideo,
+    stopAudioTrackForStt,
+    restartAudioTrackForStt,
     createOffer,
     handleOffer,
     handleAnswer,

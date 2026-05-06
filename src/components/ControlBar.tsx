@@ -1,6 +1,3 @@
-import { useState, useRef } from "react";
-import type { BgEffect } from "../types";
-
 interface ControlBarProps {
   isMuted: boolean;
   isCameraOff: boolean;
@@ -13,10 +10,6 @@ interface ControlBarProps {
   onHangUp: () => void;
   /** Whether to render buttons vertically (desktop center column) */
   vertical?: boolean;
-  /** Current virtual‑background effect */
-  bgEffect?: BgEffect;
-  /** Called when user picks a background effect */
-  onBgEffectChange?: (effect: BgEffect, image?: HTMLImageElement) => void;
 }
 
 type ButtonStyle = "default" | "danger" | "active" | "warning";
@@ -83,26 +76,11 @@ const iconScreen = (
   </svg>
 );
 
-const iconBg = (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-  </svg>
-);
-
 const iconHangUp = (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
   </svg>
 );
-
-const COLOR_OPTIONS = [
-  "#1a1a2e",
-  "#2d1b69",
-  "#1b4332",
-  "#0c525e",
-  "#3d0c11",
-  "#1e293b",
-];
 
 export default function ControlBar({
   isMuted,
@@ -115,36 +93,12 @@ export default function ControlBar({
   onToggleScreenShare,
   onHangUp,
   vertical,
-  bgEffect,
-  onBgEffectChange,
 }: ControlBarProps) {
-  const [showBgPanel, setShowBgPanel] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const active = bgEffect && bgEffect !== "off";
-
   const wrapper = vertical
-    ? "flex flex-col items-center gap-3 py-3 px-1"
+    ? "flex flex-col items-center gap-5 py-4 px-1"
     : "flex items-center justify-center gap-2 px-4 py-3 bg-dark-800/90 backdrop-blur-md rounded-2xl border border-dark-700 shadow-2xl";
 
   const separator = vertical ? "w-8 h-px bg-dark-600" : "w-px h-8 bg-dark-600";
-  const panelPos = vertical ? "left-full ml-3 top-1/2 -translate-y-1/2" : "bottom-full mb-2 left-1/2 -translate-x-1/2";
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        onBgEffectChange?.("image", img);
-        setShowBgPanel(false);
-      };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
-    // Reset so the same file can be picked again
-    e.target.value = "";
-  };
 
   return (
     <div className={wrapper}>
@@ -183,81 +137,6 @@ export default function ControlBar({
       >
         <span className="text-lg">{handRaised ? "✋" : "🤚"}</span>
       </button>
-
-      {/* Virtual Background — with popover panel */}
-      {onBgEffectChange && (
-        <div className="relative">
-          <button
-            onClick={() => setShowBgPanel((p) => !p)}
-            className={btnClass(active ? "active" : "default")}
-            title="虚拟背景"
-          >
-            {iconBg}
-          </button>
-
-          {showBgPanel && (
-            <>
-              {/* Backdrop to catch outside clicks */}
-              <div className="fixed inset-0 z-40" onClick={() => setShowBgPanel(false)} />
-              <div
-                className={`absolute ${panelPos} z-50 bg-dark-800 border border-dark-600 rounded-xl p-3 shadow-2xl w-48`}
-              >
-                <p className="text-white text-xs font-semibold mb-2">虚拟背景</p>
-
-                {/* Off */}
-                <button
-                  onClick={() => { onBgEffectChange("off"); setShowBgPanel(false); }}
-                  className={`w-full text-left px-2 py-1.5 text-xs rounded-lg transition-colors ${
-                    bgEffect === "off" ? "bg-blue-600 text-white" : "text-dark-200 hover:bg-dark-600"
-                  }`}
-                >
-                  关闭
-                </button>
-
-                {/* Blur */}
-                <button
-                  onClick={() => { onBgEffectChange("blur"); setShowBgPanel(false); }}
-                  className={`w-full text-left px-2 py-1.5 text-xs rounded-lg transition-colors mt-1 ${
-                    bgEffect === "blur" ? "bg-blue-600 text-white" : "text-dark-200 hover:bg-dark-600"
-                  }`}
-                >
-                  背景虚化
-                </button>
-
-                {/* Remove (solid color) */}
-                <p className="text-dark-400 text-xs mt-2 mb-1">纯色背景</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {COLOR_OPTIONS.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => { onBgEffectChange("remove", undefined); setShowBgPanel(false); }}
-                      title={c}
-                      className="w-6 h-6 rounded-full border border-dark-500 hover:scale-110 transition-transform"
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </div>
-
-                {/* Image upload */}
-                <p className="text-dark-400 text-xs mt-2 mb-1">自定义图片</p>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full text-left px-2 py-1.5 text-xs rounded-lg bg-dark-700 text-dark-200 hover:bg-dark-600 transition-colors"
-                >
-                  上传图片...
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleImageUpload}
-                />
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       {/* Separator */}
       <div className={separator} />

@@ -1,15 +1,12 @@
 import { useRef, useEffect } from "react";
-import type { Participant, BgEffect } from "../types";
+import type { Participant } from "../types";
 import MomoAvatar from "./MomoAvatar";
-import { useBackgroundRemoval } from "../hooks/useBackgroundRemoval";
 
 interface VideoTileProps {
   participant: Participant;
   stream?: MediaStream | null;
   isLocal?: boolean;
   isSpeaking?: boolean;
-  bgEffect?: BgEffect;
-  bgImage?: HTMLImageElement | null;
 }
 
 export default function VideoTile({
@@ -17,14 +14,8 @@ export default function VideoTile({
   stream,
   isLocal = false,
   isSpeaking = false,
-  bgEffect = "off",
-  bgImage,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { ensureModel, start, stop, updateConfig, ready } = useBackgroundRemoval();
-  const startedRef = useRef(false);
-  const bgActive = bgEffect !== "off";
 
   useEffect(() => {
     if (videoRef.current) {
@@ -32,39 +23,12 @@ export default function VideoTile({
     }
   }, [stream]);
 
-  // Load model when a bg effect is first enabled (lazy init)
+  // Lower remote audio volume to reduce echo feedback
   useEffect(() => {
-    if (bgActive && !ready) {
-      ensureModel();
+    if (videoRef.current && !isLocal) {
+      videoRef.current.volume = 0.6;
     }
-  }, [bgActive, ready, ensureModel]);
-
-  // Update the rendering mode whenever bgEffect or bgImage changes
-  useEffect(() => {
-    if (bgActive && ready) {
-      if (bgEffect === "image" && bgImage) {
-        updateConfig("image", bgImage);
-      } else {
-        updateConfig(bgEffect);
-      }
-    }
-  }, [bgEffect, bgActive, ready, updateConfig, bgImage]);
-
-  // Start/stop the processing loop
-  useEffect(() => {
-    if (bgActive && ready && videoRef.current && canvasRef.current && !startedRef.current) {
-      startedRef.current = true;
-      start(videoRef.current, canvasRef.current);
-    }
-    if (!bgActive) {
-      startedRef.current = false;
-      stop();
-    }
-    return () => {
-      startedRef.current = false;
-      stop();
-    };
-  }, [bgActive, ready, start, stop]);
+  }, [stream, isLocal]);
 
   const hasVideo =
     stream?.getVideoTracks()?.some((t) => t.enabled) && !participant.cameraOff;
@@ -75,16 +39,13 @@ export default function VideoTile({
         isSpeaking ? "border-green-500 shadow-lg shadow-green-500/20" : "border-dark-700"
       }`}
     >
-      {/* Hidden video element (still plays to feed the processing pipeline) */}
       {hasVideo && stream ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted={isLocal}
-          className={`w-full h-full object-cover ${
-            bgActive ? "absolute inset-0 opacity-0 pointer-events-none" : ""
-          }`}
+          className="w-full h-full object-cover"
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-dark-800">
@@ -98,14 +59,6 @@ export default function VideoTile({
             </div>
           )}
         </div>
-      )}
-
-      {/* Background effect canvas overlay */}
-      {bgActive && hasVideo && (
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full object-cover"
-        />
       )}
 
       {/* Bottom overlay */}
