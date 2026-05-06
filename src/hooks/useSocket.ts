@@ -10,8 +10,10 @@ export function useSocket(roomId: string | undefined) {
   useEffect(() => {
     if (!roomId) return;
 
-    const socket = io(SIGNALING_SERVER_URL, {
-      transports: ["polling"],
+    const socket = io(SIGNALING_SERVER_URL || undefined, {
+      transports: ["polling", "websocket"],
+      upgrade: true,
+      rememberUpgrade: true,
     });
     socketRef.current = socket;
 

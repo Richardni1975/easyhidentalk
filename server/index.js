@@ -7,11 +7,17 @@ const app = express();
 app.use(cors());
 
 const server = http.createServer(app);
+
+// Increase keep-alive timeout for Render proxy compatibility
+server.keepAliveTimeout = 120000;
+server.headersTimeout = 125000;
+
 const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
   },
+  cookie: false,
 });
 
 // In production, serve the built frontend
@@ -47,9 +53,17 @@ function anonymizePoll(poll) {
   };
 }
 
+io.engine.on("connection_error", (err) => {
+  console.error("[Engine] Connection error:", err.code, err.message, err.context);
+});
+
 io.on("connection", (socket) => {
   let currentRoom = null;
   let currentPeerId = null;
+
+  socket.on("error", (err) => {
+    console.error(`[Socket] ${currentPeerId} error:`, err.message);
+  });
 
   socket.on("join-room", ({ roomId, peerId, userName, isMomo }) => {
     currentRoom = roomId;
