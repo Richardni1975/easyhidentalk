@@ -1,12 +1,15 @@
 import { useRef, useEffect } from "react";
-import type { Participant } from "../types";
+import type { Participant, BgEffect } from "../types";
 import MomoAvatar from "./MomoAvatar";
+import { useBackgroundRemoval } from "../hooks/useBackgroundRemoval";
 
 interface VideoTileProps {
   participant: Participant;
   stream?: MediaStream | null;
   isLocal?: boolean;
   isSpeaking?: boolean;
+  bgEffect?: BgEffect;
+  bgImage?: HTMLImageElement | null;
 }
 
 export default function VideoTile({
@@ -14,8 +17,14 @@ export default function VideoTile({
   stream,
   isLocal = false,
   isSpeaking = false,
+  bgEffect = "off",
+  bgImage,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { ensureModel, start, stop, updateConfig, ready } = useBackgroundRemoval();
+  const startedRef = useRef(false);
+  const bgActive = bgEffect !== "off";
 
   useEffect(() => {
     if (videoRef.current) {
@@ -23,8 +32,42 @@ export default function VideoTile({
     }
   }, [stream]);
 
-  const hasVideo = stream?.getVideoTracks()?.some((t) => t.enabled) && !participant.cameraOff;
-  const hasAudio = stream?.getAudioTracks()?.some((t) => t.enabled) && !participant.muted;
+  // Load model when a bg effect is first enabled (lazy init)
+  useEffect(() => {
+    if (bgActive && !ready) {
+      ensureModel();
+    }
+  }, [bgActive, ready, ensureModel]);
+
+  // Update the rendering mode whenever bgEffect or bgImage changes
+  useEffect(() => {
+    if (bgActive && ready) {
+      if (bgEffect === "image" && bgImage) {
+        updateConfig("image", bgImage);
+      } else {
+        updateConfig(bgEffect);
+      }
+    }
+  }, [bgEffect, bgActive, ready, updateConfig, bgImage]);
+
+  // Start/stop the processing loop
+  useEffect(() => {
+    if (bgActive && ready && videoRef.current && canvasRef.current && !startedRef.current) {
+      startedRef.current = true;
+      start(videoRef.current, canvasRef.current);
+    }
+    if (!bgActive) {
+      startedRef.current = false;
+      stop();
+    }
+    return () => {
+      startedRef.current = false;
+      stop();
+    };
+  }, [bgActive, ready, start, stop]);
+
+  const hasVideo =
+    stream?.getVideoTracks()?.some((t) => t.enabled) && !participant.cameraOff;
 
   return (
     <div
@@ -32,14 +75,16 @@ export default function VideoTile({
         isSpeaking ? "border-green-500 shadow-lg shadow-green-500/20" : "border-dark-700"
       }`}
     >
-      {/* Video */}
+      {/* Hidden video element (still plays to feed the processing pipeline) */}
       {hasVideo && stream ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted={isLocal}
-          className="w-full h-full object-cover"
+          className={`w-full h-full object-cover ${
+            bgActive ? "absolute inset-0 opacity-0 pointer-events-none" : ""
+          }`}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-dark-800">
@@ -55,10 +100,17 @@ export default function VideoTile({
         </div>
       )}
 
+      {/* Background effect canvas overlay */}
+      {bgActive && hasVideo && (
+        <canvas
+          ref={canvasRef}
+          className="w-full h-full object-cover"
+        />
+      )}
+
       {/* Bottom overlay */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-8">
         <div className="flex items-center gap-2">
-          {/* Avatar */}
           {participant.isMomo ? (
             <MomoAvatar size={24} />
           ) : (
@@ -69,20 +121,18 @@ export default function VideoTile({
             </div>
           )}
 
-          {/* Name */}
           <span className="text-white text-sm font-medium drop-shadow-lg">
             {participant.isMomo ? "momo" : participant.realName}
             {isLocal && " (你)"}
           </span>
 
-          {/* Audio indicator */}
-          {!hasAudio && (
+          {/* Audio muted indicator */}
+          {participant.muted && (
             <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
             </svg>
           )}
 
-          {/* Hand raised */}
           {participant.handRaised && (
             <span className="ml-auto text-yellow-400">✋</span>
           )}

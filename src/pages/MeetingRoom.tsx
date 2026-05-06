@@ -6,7 +6,7 @@ import { useWebRTC } from "../hooks/useWebRTC";
 import VideoGrid from "../components/VideoGrid";
 import ControlBar from "../components/ControlBar";
 import ChatPanel from "../components/ChatPanel";
-import type { Participant, ChatMessage, Poll } from "../types";
+import type { Participant, ChatMessage, Poll, BgEffect } from "../types";
 import PollResultsModal from "../components/PollResultsModal";
 import PollBrowserModal from "../components/PollBrowserModal";
 
@@ -38,11 +38,13 @@ function MeetingRoomInner() {
   } = useMeeting();
 
   const [connected, setConnected] = useState(false);
-  const [speakingPeerId, setSpeakingPeerId] = useState<string | null>(null);
+  const [speakingPeerId] = useState<string | null>(null);
   const [screenSharingPeerId, setScreenSharingPeerId] = useState<string | null>(null);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [viewingPoll, setViewingPoll] = useState<Poll | null>(null);
   const [showPollBrowser, setShowPollBrowser] = useState(false);
+  const [bgEffect, setBgEffect] = useState<BgEffect>("off");
+  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const amHostRef = useRef(false);
 
   const {
@@ -191,12 +193,11 @@ function MeetingRoomInner() {
       await addIceCandidate(from, candidate);
     });
 
+    // Use functional state updates to avoid stale closures
     const unsubLeft = on("user-left", ({ peerId: leftPeerId }: any) => {
       removeParticipant(leftPeerId);
       clearScreenShareStream(leftPeerId);
-      if (screenSharingPeerId === leftPeerId) {
-        setScreenSharingPeerId(null);
-      }
+      setScreenSharingPeerId((prev) => (prev === leftPeerId ? null : prev));
     });
 
     const unsubUpdated = on("user-updated", (data: any) => {
@@ -234,11 +235,10 @@ function MeetingRoomInner() {
       setScreenSharingPeerId(data.peerId);
     });
 
+    // Use functional state update to avoid stale closure
     const unsubScreenStopped = on("screen-share-stopped", (data: { peerId: string }) => {
       clearScreenShareStream(data.peerId);
-      if (screenSharingPeerId === data.peerId) {
-        setScreenSharingPeerId(null);
-      }
+      setScreenSharingPeerId((prev) => (prev === data.peerId ? null : prev));
     });
 
     // Poll events
@@ -347,6 +347,25 @@ function MeetingRoomInner() {
     emit("stop-screen-share");
   }, [stopScreenShare, emit]);
 
+  // Save pre-STT mute state so we can restore it properly
+  const preSttMuteRef = useRef(false);
+  const handleVoiceInputChange = useCallback(
+    (active: boolean) => {
+      if (active) {
+        preSttMuteRef.current = isMuted;
+        toggleAudio(false);
+        setIsMuted(true);
+        emit("user-mute", { muted: true });
+      } else {
+        const restoreMuted = preSttMuteRef.current;
+        toggleAudio(!restoreMuted);
+        setIsMuted(restoreMuted);
+        emit("user-mute", { muted: restoreMuted });
+      }
+    },
+    [isMuted, toggleAudio, setIsMuted, emit]
+  );
+
   // Host determination
   const hostPeerId = useMemo(() => {
     if (amHostRef.current) return peerId;
@@ -354,16 +373,25 @@ function MeetingRoomInner() {
     return host?.peerId || null;
   }, [participants, peerId]);
 
-  const localParticipant: Participant = {
-    peerId,
-    userName: isMomo ? "momo" : userName,
-    realName: userName,
-    isMomo,
-    isHost: hostPeerId === peerId,
-    muted: isMuted,
-    cameraOff: isCameraOff,
-    handRaised,
-  };
+  // Memoize to prevent cascading re-renders through VideoGrid
+  const localParticipant = useMemo<Participant>(
+    () => ({
+      peerId,
+      userName: isMomo ? "momo" : userName,
+      realName: userName,
+      isMomo,
+      isHost: hostPeerId === peerId,
+      muted: isMuted,
+      cameraOff: isCameraOff,
+      handRaised,
+    }),
+    [peerId, isMomo, userName, isMuted, isCameraOff, handRaised, hostPeerId]
+  );
+
+  const remoteParticipants = useMemo(
+    () => participants.filter((p) => p.peerId !== peerId),
+    [participants, peerId]
+  );
 
   // 4 video slot priority: host > speaker > hand-raisers > join order
   const videoPriorityPeerIds = useMemo(() => {
@@ -394,8 +422,6 @@ function MeetingRoomInner() {
 
     return Array.from(priority);
   }, [participants, hostPeerId, speakingPeerId, peerId]);
-
-  const remoteParticipants = participants.filter((p) => p.peerId !== peerId);
 
   // Screen share display stream
   const activeScreenStream = useMemo(() => {
@@ -432,28 +458,21 @@ function MeetingRoomInner() {
     setViewingPoll(poll);
   }, []);
 
-  // Handle STT voice input: mute WebRTC audio to prevent mic contention
-  const handleVoiceInputChange = useCallback(
-    (active: boolean) => {
-      if (active) {
-        // STT starting — mute WebRTC audio
-        toggleAudio(false);
-        setIsMuted(true);
-        emit("user-mute", { muted: true });
-      } else {
-        // STT done — restore audio
-        toggleAudio(true);
-        setIsMuted(false);
-        emit("user-mute", { muted: false });
-      }
-    },
-    [toggleAudio, setIsMuted, emit]
-  );
+  const handleToggleMomo = useCallback(() => {
+    const newMomo = !isMomo;
+    setIsMomo(newMomo);
+    emit("momo-toggle", { isMomo: newMomo });
+  }, [isMomo, setIsMomo, emit]);
+
+  const handleBgEffectChange = useCallback((effect: BgEffect, image?: HTMLImageElement) => {
+    setBgEffect(effect);
+    if (image) setBgImage(image);
+  }, []);
 
   return (
     <div className="h-screen w-screen bg-dark-950 flex flex-col">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-dark-900 border-b border-dark-800">
+      <div className="flex items-center justify-between px-4 py-2 bg-dark-900 border-b border-dark-800 flex-shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-white font-semibold text-sm">{roomId}</span>
           <span className="text-dark-500 text-xs">|</span>
@@ -475,39 +494,52 @@ function MeetingRoomInner() {
         </div>
       </div>
 
-      {/* Main content: video + chat */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        {/* Left: Video grid OR screen share */}
-        <div className="md:w-[65%] w-full min-h-0 flex flex-col">
-          {activeScreenStream ? (
-            /* Screen share active — show video + avatar bar */
-            <div className="flex-1 flex flex-col min-h-0">
-              <div className="flex-1 bg-dark-950 flex items-center justify-center relative">
-                <video
-                  autoPlay
-                  playsInline
-                  muted={screenSharingPeerId === peerId}
-                  className="w-full h-full object-contain"
-                  ref={(el) => {
-                    if (el && el.srcObject !== activeScreenStream) {
-                      el.srcObject = activeScreenStream;
-                    }
-                  }}
+      {/* Main swipeable area — mobile: scroll-snap, desktop: side-by-side */}
+      <div className="flex-1 flex overflow-x-auto md:overflow-hidden snap-x snap-mandatory min-h-0">
+        {/* LEFT: Video panel */}
+        <div className="w-full md:w-1/2 flex-shrink-0 snap-start flex flex-col min-h-0">
+          {/* Video content */}
+          <div className="flex-1 flex flex-col min-h-0">
+            {activeScreenStream ? (
+              /* Screen share active */
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex-1 bg-dark-950 flex items-center justify-center relative">
+                  <video
+                    autoPlay
+                    playsInline
+                    muted={screenSharingPeerId === peerId}
+                    className="w-full h-full object-contain"
+                    ref={(el) => {
+                      if (el && el.srcObject !== activeScreenStream) {
+                        el.srcObject = activeScreenStream;
+                      }
+                    }}
+                  />
+                  {screenSharingPeerId === peerId && (
+                    <button
+                      onClick={handleStopScreenShare}
+                      className="absolute top-3 right-3 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-colors flex items-center gap-1.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      停止共享
+                    </button>
+                  )}
+                </div>
+                <VideoGrid
+                  localParticipant={localParticipant}
+                  localStream={localStream}
+                  remoteStreams={remoteStreams}
+                  participants={remoteParticipants}
+                  speakingPeerId={speakingPeerId}
+                  videoPriorityPeerIds={videoPriorityPeerIds}
+                  screenSharing={true}
+                  bgEffect={bgEffect}
+                bgImage={bgImage}
                 />
-                {/* Stop screen share button (only for sharer) */}
-                {screenSharingPeerId === peerId && (
-                  <button
-                    onClick={handleStopScreenShare}
-                    className="absolute top-3 right-3 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    停止共享
-                  </button>
-                )}
               </div>
-              {/* Avatar bar during screen share */}
+            ) : (
               <VideoGrid
                 localParticipant={localParticipant}
                 localStream={localStream}
@@ -515,24 +547,51 @@ function MeetingRoomInner() {
                 participants={remoteParticipants}
                 speakingPeerId={speakingPeerId}
                 videoPriorityPeerIds={videoPriorityPeerIds}
-                screenSharing={true}
+                bgEffect={bgEffect}
+                bgImage={bgImage}
               />
-            </div>
-          ) : (
-            /* Normal video grid */
-            <VideoGrid
-              localParticipant={localParticipant}
-              localStream={localStream}
-              remoteStreams={remoteStreams}
-              participants={remoteParticipants}
-              speakingPeerId={speakingPeerId}
-              videoPriorityPeerIds={videoPriorityPeerIds}
+            )}
+          </div>
+
+          {/* Mobile: bottom control bar */}
+          <div className="md:hidden flex items-center justify-center py-2 px-4 bg-dark-900/80 border-t border-dark-800 flex-shrink-0">
+            <ControlBar
+              isMuted={isMuted}
+              isCameraOff={isCameraOff}
+              handRaised={handRaised}
+              isScreenSharing={!!screenSharingPeerId}
+              onToggleMute={handleToggleMute}
+              onToggleCamera={handleToggleCamera}
+              onToggleHandRaise={handleToggleHandRaise}
+              onToggleScreenShare={handleToggleScreenShare}
+              onHangUp={handleHangUp}
+              vertical={false}
+              bgEffect={bgEffect}
+              onBgEffectChange={handleBgEffectChange}
             />
-          )}
+          </div>
         </div>
 
-        {/* Right: Chat panel */}
-        <div className="md:w-[35%] w-full min-h-0 border-t md:border-t-0 md:border-l border-dark-700 flex flex-col">
+        {/* DESKTOP: Vertical control buttons */}
+        <div className="hidden md:flex flex-col items-center justify-center flex-shrink-0 w-14 bg-dark-900/50 border-l border-r border-dark-800/50">
+          <ControlBar
+            isMuted={isMuted}
+            isCameraOff={isCameraOff}
+            handRaised={handRaised}
+            isScreenSharing={!!screenSharingPeerId}
+            onToggleMute={handleToggleMute}
+            onToggleCamera={handleToggleCamera}
+            onToggleHandRaise={handleToggleHandRaise}
+            onToggleScreenShare={handleToggleScreenShare}
+            onHangUp={handleHangUp}
+            vertical={true}
+            bgEffect={bgEffect}
+            onBgEffectChange={handleBgEffectChange}
+          />
+        </div>
+
+        {/* RIGHT: Chat panel */}
+        <div className="w-full md:w-1/2 flex-shrink-0 snap-end flex flex-col min-h-0">
           <ChatPanel
             messages={chatMessages}
             onSend={handleSendChat}
@@ -544,6 +603,7 @@ function MeetingRoomInner() {
             onClosePoll={handleClosePoll}
             onViewResults={handleViewResults}
             onVoiceInputChange={handleVoiceInputChange}
+            onToggleMomo={handleToggleMomo}
           />
         </div>
       </div>
@@ -555,21 +615,6 @@ function MeetingRoomInner() {
       {viewingPoll && (
         <PollResultsModal poll={viewingPoll} onClose={() => setViewingPoll(null)} />
       )}
-
-      {/* Bottom control bar */}
-      <div className="flex items-center justify-center py-3 px-4 bg-dark-900/80 backdrop-blur-sm border-t border-dark-800">
-        <ControlBar
-          isMuted={isMuted}
-          isCameraOff={isCameraOff}
-          handRaised={handRaised}
-          isScreenSharing={!!screenSharingPeerId}
-          onToggleMute={handleToggleMute}
-          onToggleCamera={handleToggleCamera}
-          onToggleHandRaise={handleToggleHandRaise}
-          onToggleScreenShare={handleToggleScreenShare}
-          onHangUp={handleHangUp}
-        />
-      </div>
     </div>
   );
 }

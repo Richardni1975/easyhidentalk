@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import type { ChatMessage, Poll, PollVote } from "../types";
+import type { ChatMessage, Poll } from "../types";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -13,6 +13,8 @@ interface ChatPanelProps {
   onViewResults: (poll: Poll) => void;
   /** Called when STT starts/stops — parent should mute/unmute WebRTC audio to avoid mic conflict */
   onVoiceInputChange?: (active: boolean) => void;
+  /** Toggle Momo identity */
+  onToggleMomo?: () => void;
 }
 
 // Random bright color for momo voice input obfuscation
@@ -59,6 +61,7 @@ export default function ChatPanel({
   onClosePoll,
   onViewResults,
   onVoiceInputChange,
+  onToggleMomo,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -321,7 +324,19 @@ export default function ChatPanel({
             投票 {polls.length > 0 && `(${polls.length})`}
           </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          {/* Momo identity toggle */}
+          <button
+            onClick={onToggleMomo}
+            title={isMomo ? "切换为实名" : "切换为匿名(momo)"}
+            className={`px-2 py-1 text-xs rounded-lg font-medium transition-all ${
+              isMomo
+                ? "bg-purple-600 text-white shadow-sm shadow-purple-500/30"
+                : "text-dark-400 hover:text-white border border-dark-600"
+            }`}
+          >
+            {isMomo ? "Momo" : "实名"}
+          </button>
           {/* Create poll button (only in poll view) */}
           {chatView === "poll" && (
             <button

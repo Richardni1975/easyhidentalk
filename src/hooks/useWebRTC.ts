@@ -9,7 +9,6 @@ interface PeerConnection {
 export function useWebRTC() {
   const peerConnections = useRef<Map<string, PeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
-  const cameraVideoTrackRef = useRef<MediaStreamTrack | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<
     Map<string, MediaStream>
@@ -45,7 +44,6 @@ export function useWebRTC() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      cameraVideoTrackRef.current = stream.getVideoTracks()[0] || null;
       localStreamRef.current = stream;
       setLocalStream(stream);
       return stream;
@@ -54,7 +52,6 @@ export function useWebRTC() {
       console.warn("Failed to get camera, retrying with audio only:", err);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        cameraVideoTrackRef.current = null;
         localStreamRef.current = stream;
         setLocalStream(stream);
         return stream;
@@ -327,7 +324,6 @@ export function useWebRTC() {
     peerConnections.current.clear();
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
-    cameraVideoTrackRef.current = null;
     if (localScreenStreamRef.current) {
       localScreenStreamRef.current.getTracks().forEach((t) => t.stop());
       localScreenStreamRef.current = null;
@@ -347,7 +343,6 @@ export function useWebRTC() {
     remoteStreams,
     screenShareStreams,
     localScreenStream,
-    peerConnections,
     startLocalStream,
     createPeerConnection,
     startScreenShare,

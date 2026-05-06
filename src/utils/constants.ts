@@ -37,4 +37,3 @@ export const ICE_SERVERS: RTCIceServer[] = [
   },
 ];
 
-export const PITCH_SHIFT_RATIO = 1.35;
