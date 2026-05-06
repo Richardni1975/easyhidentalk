@@ -5,18 +5,20 @@ import { SIGNALING_SERVER_URL } from "../utils/constants";
 export function useSocket(roomId: string | undefined) {
   const socketRef = useRef<Socket | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [connectCount, setConnectCount] = useState(0);
 
   useEffect(() => {
     if (!roomId) return;
 
     const socket = io(SIGNALING_SERVER_URL, {
-      transports: ["websocket", "polling"],
+      transports: ["polling", "websocket"],
     });
     socketRef.current = socket;
 
     socket.on("connect", () => {
       console.log("Socket.IO connected:", socket.id);
       setSocketConnected(true);
+      setConnectCount((c) => c + 1);
     });
 
     socket.on("connect_error", (err) => {
@@ -56,5 +58,5 @@ export function useSocket(roomId: string | undefined) {
     socketRef.current?.off(event, handler);
   }, []);
 
-  return { socket: socketRef, emit, on, off, socketConnected };
+  return { socket: socketRef, emit, on, off, socketConnected, connectCount };
 }

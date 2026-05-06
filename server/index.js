@@ -366,7 +366,8 @@ io.on("connection", (socket) => {
     io.to(currentRoom).emit("poll-closed", anonymizePoll(poll));
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", (reason) => {
+    console.log(`[Socket] ${currentPeerId} disconnected. Reason: ${reason}`);
     if (currentPeerId) {
       peerSockets.delete(currentPeerId);
     }

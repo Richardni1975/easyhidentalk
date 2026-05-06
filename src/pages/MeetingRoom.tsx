@@ -77,7 +77,7 @@ function MeetingRoomInner() {
     cleanupAll,
   } = useWebRTC();
 
-  const { emit, on, socketConnected } = useSocket(roomId);
+  const { emit, on, socketConnected, connectCount } = useSocket(roomId);
   const { createPitchShiftedStream, setPitchEnabled, cleanup: cleanupAudio } = useAudioEffects();
 
   const state = location.state as {
@@ -209,7 +209,7 @@ function MeetingRoomInner() {
 
       // Create peer connections for each existing participant
       participantsList.forEach((p) => {
-        const pc = createPeerConnection(
+        createPeerConnection(
           p.peerId,
           stream,
           (peerId, candidate) => {
@@ -441,7 +441,7 @@ function MeetingRoomInner() {
       unsubExistingPolls();
       unsubExistingMsgs();
     };
-  }, [connected, roomId, localStream, socketConnected, sharedContent, screenSharingPeerId]);
+  }, [connected, roomId, localStream, socketConnected, connectCount]);
 
   const handleToggleMute = useCallback(() => {
     const newMuted = !isMuted;
