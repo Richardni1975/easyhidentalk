@@ -31,7 +31,11 @@ export function useWebRTC() {
 
   const startLocalStream = useCallback(async () => {
     const constraints: MediaStreamConstraints = {
-      audio: true,
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
       video: {
         width: { ideal: 640 },
         height: { ideal: 480 },
@@ -81,7 +85,10 @@ export function useWebRTC() {
         screenSenders.current.delete(peerId);
       }
 
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection({
+        iceServers: ICE_SERVERS,
+        iceCandidatePoolSize: 5,
+      });
 
       // Add local tracks (camera + audio)
       stream.getTracks().forEach((track) => {
