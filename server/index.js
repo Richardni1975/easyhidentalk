@@ -19,6 +19,9 @@ const io = new Server(server, {
   },
   cookie: false,
   transports: ["websocket"],
+  pingInterval: 8000,
+  pingTimeout: 5000,
+  perMessageDeflate: false,
 });
 
 // In production, serve the built frontend
