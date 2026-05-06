@@ -11,6 +11,8 @@ interface ChatPanelProps {
   onVotePoll: (pollId: string, optionIndex: number, identity?: "real" | "momo") => void;
   onClosePoll: (pollId: string) => void;
   onViewResults: (poll: Poll) => void;
+  /** Called when STT starts/stops — parent should mute/unmute WebRTC audio to avoid mic conflict */
+  onVoiceInputChange?: (active: boolean) => void;
 }
 
 // Random bright color for momo voice input obfuscation
@@ -56,6 +58,7 @@ export default function ChatPanel({
   onVotePoll,
   onClosePoll,
   onViewResults,
+  onVoiceInputChange,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -105,6 +108,17 @@ export default function ChatPanel({
     };
   }, []);
 
+  /** Shared cleanup helper for STT stop in all code paths */
+  const stopStt = useCallback(() => {
+    listeningRef.current = false;
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setIsListening(false);
+    setInterimText("");
+    setVoiceColoredText([]);
+    onVoiceInputChange?.(false);
+  }, [onVoiceInputChange]);
+
   const startListening = useCallback(() => {
     const SpeechRecognitionAPI =
       (window as any).SpeechRecognition ||
@@ -116,20 +130,17 @@ export default function ChatPanel({
     }
 
     if (listeningRef.current) {
-      // Stop listening
-      listeningRef.current = false;
-      recognitionRef.current?.stop();
-      recognitionRef.current = null;
-      setIsListening(false);
-      setInterimText("");
-      setVoiceColoredText([]);
+      stopStt();
       return;
     }
+
+    // Notify parent to mute WebRTC audio (prevent mic contention)
+    onVoiceInputChange?.(true);
 
     const recognition = new SpeechRecognitionAPI();
     recognition.lang = "zh-CN";
     recognition.interimResults = true;
-    recognition.continuous = false;  // non-continuous to avoid media pipeline contention
+    recognition.continuous = false;
 
     recognition.onresult = (event: any) => {
       let finalText = "";
@@ -151,7 +162,6 @@ export default function ChatPanel({
 
       setInterimText(interim);
 
-      // When Momo is on, build colored segments from all results
       if (isMomo) {
         const results: { text: string; color: string }[] = [];
         for (let i = 0; i < event.results.length; i++) {
@@ -165,30 +175,18 @@ export default function ChatPanel({
     };
 
     recognition.onerror = () => {
-      listeningRef.current = false;
-      recognitionRef.current = null;
-      setIsListening(false);
-      setInterimText("");
-      setVoiceColoredText([]);
+      stopStt();
     };
 
     recognition.onend = () => {
-      // Auto-restart if still in listening mode
       if (listeningRef.current) {
         try {
           recognition.start();
         } catch {
-          listeningRef.current = false;
-          recognitionRef.current = null;
-          setIsListening(false);
-          setInterimText("");
-          setVoiceColoredText([]);
+          stopStt();
         }
       } else {
-        recognitionRef.current = null;
-        setIsListening(false);
-        setInterimText("");
-        setVoiceColoredText([]);
+        stopStt();
       }
     };
 
@@ -196,7 +194,7 @@ export default function ChatPanel({
     listeningRef.current = true;
     recognition.start();
     setIsListening(true);
-  }, [isMomo]);
+  }, [isMomo, onVoiceInputChange, stopStt]);
 
   const handleSend = () => {
     const text = input.trim();

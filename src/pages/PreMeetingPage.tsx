@@ -162,7 +162,7 @@ export default function PreMeetingPage() {
                 <div>
                   <p className="text-white font-medium">Join as Momo</p>
                   <p className="text-dark-400 text-xs">
-                    Anonymous identity + voice changer
+                    匿名身份
                   </p>
                 </div>
               </div>

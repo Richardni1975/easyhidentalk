@@ -9,11 +9,8 @@ interface VideoGridProps {
   remoteStreams: Map<string, MediaStream>;
   participants: Participant[];
   speakingPeerId?: string | null;
-  focusPeerId?: string | null;
   videoPriorityPeerIds?: string[];
-  isHost?: boolean;
-  onPromote?: (peerId: string) => void;
-  promotedPeerIds?: string[];
+  screenSharing?: boolean;
 }
 
 export default function VideoGrid({
@@ -22,21 +19,12 @@ export default function VideoGrid({
   remoteStreams,
   participants,
   speakingPeerId,
-  focusPeerId,
   videoPriorityPeerIds,
-  isHost,
-  onPromote,
-  promotedPeerIds,
+  screenSharing,
 }: VideoGridProps) {
-  // Priority set defaults to all participants if not provided (backward compat)
   const prioritySet = useMemo(
     () => (videoPriorityPeerIds ? new Set(videoPriorityPeerIds) : null),
     [videoPriorityPeerIds]
-  );
-
-  const promotedSet = useMemo(
-    () => (promotedPeerIds ? new Set(promotedPeerIds) : new Set<string>()),
-    [promotedPeerIds]
   );
 
   const allParticipants = useMemo(() => {
@@ -44,10 +32,8 @@ export default function VideoGrid({
     return list;
   }, [localParticipant, participants]);
 
-  // Split into video participants (show video tile) and avatars
   const { videoParticipants, avatarParticipants } = useMemo(() => {
     if (!prioritySet) {
-      // No limit — everyone gets video
       return { videoParticipants: allParticipants, avatarParticipants: [] };
     }
     const video: Participant[] = [];
@@ -64,52 +50,53 @@ export default function VideoGrid({
 
   const count = videoParticipants.length;
 
-  // When a focus peer is set, find and render only that participant full-size
-  const focusParticipant = useMemo(() => {
-    if (!focusPeerId) return null;
-    return allParticipants.find((p) => p.peerId === focusPeerId) || null;
-  }, [focusPeerId, allParticipants]);
-
-  // Determine grid columns based on video participant count
   const gridClass = useMemo(() => {
     if (count <= 1) return "grid-cols-1";
     if (count <= 2) return "grid-cols-1 md:grid-cols-2";
     if (count <= 4) return "grid-cols-2";
-    if (count <= 6) return "grid-cols-2 md:grid-cols-3";
-    if (count <= 9) return "grid-cols-3";
-    return "grid-cols-4";
+    return "grid-cols-2";
   }, [count]);
 
-  if (count === 0 && !focusParticipant) {
+  // Screen sharing mode: show only compact avatar list
+  if (screenSharing) {
     return (
-      <div className="flex-1 flex items-center justify-center text-dark-400">
-        Waiting for participants...
+      <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto">
+        {allParticipants.map((p) => (
+          <div
+            key={p.peerId}
+            className="flex items-center gap-1.5 flex-shrink-0 px-2 py-1 rounded-lg bg-dark-800/80"
+          >
+            {p.isMomo ? (
+              <MomoAvatar size={24} />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-dark-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-[10px] font-bold text-dark-300">
+                  {p.realName?.charAt(0).toUpperCase() || "?"}
+                </span>
+              </div>
+            )}
+            <span className="text-xs text-dark-300 truncate max-w-[60px]">
+              {p.isMomo ? "momo" : p.realName}
+              {p.peerId === localParticipant.peerId && <span className="text-dark-500"> (你)</span>}
+            </span>
+            {p.handRaised && <span className="text-yellow-400 text-xs">✋</span>}
+          </div>
+        ))}
       </div>
     );
   }
 
-  // Focus mode: single participant full-size
-  if (focusParticipant) {
+  if (count === 0) {
     return (
-      <div className="flex-1 p-4">
-        <VideoTile
-          key={focusParticipant.peerId}
-          participant={focusParticipant}
-          stream={
-            focusParticipant.peerId === localParticipant.peerId
-              ? localStream
-              : remoteStreams.get(focusParticipant.peerId) || null
-          }
-          isLocal={focusParticipant.peerId === localParticipant.peerId}
-          isSpeaking={focusParticipant.peerId === speakingPeerId}
-        />
+      <div className="flex-1 flex items-center justify-center text-dark-400">
+        等待参与者加入...
       </div>
     );
   }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Video tiles section */}
+      {/* Video tiles */}
       {count > 0 && (
         <div className={`grid ${gridClass} gap-3 p-4 auto-rows-fr`}>
           {videoParticipants.map((p) => (
@@ -128,7 +115,7 @@ export default function VideoGrid({
         </div>
       )}
 
-      {/* Avatar-only participants list */}
+      {/* Avatar-only participants */}
       {avatarParticipants.length > 0 && (
         <div className="overflow-y-auto border-t border-dark-700 px-2 py-1">
           {avatarParticipants.map((p) => (
@@ -136,7 +123,6 @@ export default function VideoGrid({
               key={p.peerId}
               className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-dark-800 transition-colors"
             >
-              {/* Avatar */}
               {p.isMomo ? (
                 <MomoAvatar size={28} />
               ) : (
@@ -147,7 +133,6 @@ export default function VideoGrid({
                 </div>
               )}
 
-              {/* Name */}
               <span className="text-xs text-dark-300 truncate min-w-0 flex-1">
                 {p.isMomo ? "momo" : p.realName}
                 {p.peerId === localParticipant.peerId && (
@@ -158,11 +143,7 @@ export default function VideoGrid({
                 )}
               </span>
 
-              {/* Status icons and promote button */}
               <div className="flex items-center gap-1 flex-shrink-0">
-                {promotedSet.has(p.peerId) && (
-                  <span className="text-[10px] bg-blue-600/60 text-blue-200 px-1.5 py-0.5 rounded">已提升</span>
-                )}
                 {p.handRaised && <span className="text-yellow-400 text-xs">✋</span>}
                 {!p.muted ? (
                   <svg className="w-3 h-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -172,15 +153,6 @@ export default function VideoGrid({
                   <svg className="w-3 h-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                   </svg>
-                )}
-                {isHost && onPromote && !promotedSet.has(p.peerId) && (
-                  <button
-                    onClick={() => onPromote(p.peerId)}
-                    className="text-[10px] bg-purple-600/60 text-purple-200 px-1.5 py-0.5 rounded hover:bg-purple-500/80 transition-colors ml-1"
-                    title="提升为发言人（获得视频画面和发言权）"
-                  >
-                    提升
-                  </button>
                 )}
               </div>
             </div>

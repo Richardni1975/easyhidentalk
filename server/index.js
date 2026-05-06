@@ -36,7 +36,6 @@ app.get("*", (req, res) => {
 const rooms = new Map(); // roomId -> Map of peerId -> participantInfo
 const roomPolls = new Map(); // roomId -> Map of pollId -> pollData
 const roomMessages = new Map(); // roomId -> array of chat messages
-const roomPromoted = new Map(); // roomId -> string[] of promoted peerIds
 
 const peerSockets = new Map(); // peerId -> socket.id for direct messaging (offer/answer/ICE)
 
@@ -117,9 +116,6 @@ io.on("connection", (socket) => {
 
     socket.emit("existing-participants", existingParticipants);
 
-    // Send promoted list to new joiner
-    socket.emit("existing-promoted", { promotedPeerIds: roomPromoted.get(roomId) || [] });
-
     // Send existing polls to the new joiner (anonymize momo-mode polls)
     const existingPolls = roomPolls.get(roomId);
     if (existingPolls && existingPolls.size > 0) {
@@ -186,20 +182,6 @@ io.on("connection", (socket) => {
     io.to(currentRoom).emit("chat-message", msg);
   });
 
-  socket.on("voice-message", ({ audioData, duration }) => {
-    if (!currentRoom) return;
-    const room = rooms.get(currentRoom);
-    const sender = room?.get(currentPeerId);
-    socket.to(currentRoom).emit("voice-message", {
-      senderId: currentPeerId,
-      senderName: sender?.isMomo ? "momo" : sender?.realName || "Unknown",
-      isMomo: sender?.isMomo || false,
-      audioData,
-      duration,
-      timestamp: Date.now(),
-    });
-  });
-
   socket.on("momo-toggle", ({ isMomo }) => {
     if (!currentRoom) return;
     const room = rooms.get(currentRoom);
@@ -244,40 +226,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("emoji", ({ emoji }) => {
-    if (!currentRoom) return;
-    io.to(currentRoom).emit("emoji", { peerId: currentPeerId, emoji });
-  });
-
-  socket.on("share-url", ({ url, senderName }) => {
-    if (!currentRoom) return;
-    socket.to(currentRoom).emit("share-url", {
-      url,
-      sharedBy: currentPeerId,
-      senderName,
-      timestamp: Date.now(),
-    });
-  });
-
-  socket.on("share-text", ({ text, fileName, senderName, mimeType }) => {
-    if (!currentRoom) return;
-    socket.to(currentRoom).emit("share-text", {
-      text,
-      fileName,
-      mimeType,
-      sharedBy: currentPeerId,
-      senderName,
-      timestamp: Date.now(),
-    });
-  });
-
-  socket.on("stop-share", () => {
-    if (!currentRoom) return;
-    socket.to(currentRoom).emit("stop-share", {
-      sharedBy: currentPeerId,
-    });
-  });
-
   socket.on("start-screen-share", () => {
     if (!currentRoom) return;
     socket.to(currentRoom).emit("screen-share-started", {
@@ -292,42 +240,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  // --- Host promotion events ---
-
-  socket.on("promote-participant", ({ peerId: targetPeerId }) => {
-    if (!currentRoom) return;
-    const room = rooms.get(currentRoom);
-    const sender = room?.get(currentPeerId);
-    if (!sender || !sender.isHost) return;
-    if (targetPeerId === currentPeerId) return; // can't promote self
-
-    if (!roomPromoted.has(currentRoom)) {
-      roomPromoted.set(currentRoom, []);
-    }
-    const promoted = roomPromoted.get(currentRoom);
-    if (!promoted.includes(targetPeerId)) {
-      promoted.push(targetPeerId);
-      io.to(currentRoom).emit("promoted-updated", { promotedPeerIds: [...promoted] });
-      console.log(`[${currentRoom}] Host promoted ${targetPeerId}`);
-    }
-  });
-
-  socket.on("demote-participant", ({ peerId: targetPeerId }) => {
-    if (!currentRoom) return;
-    const room = rooms.get(currentRoom);
-    const sender = room?.get(currentPeerId);
-    if (!sender || !sender.isHost) return;
-
-    const promoted = roomPromoted.get(currentRoom);
-    if (!promoted) return;
-    const filtered = promoted.filter((id) => id !== targetPeerId);
-    roomPromoted.set(currentRoom, filtered);
-    io.to(currentRoom).emit("promoted-updated", { promotedPeerIds: filtered });
-    console.log(`[${currentRoom}] Host demoted ${targetPeerId}`);
-  });
-
   // --- Poll events ---
-
   socket.on("create-poll", ({ question, optionsTexts, votingMode }) => {
     if (!currentRoom || !currentPeerId) return;
     const room = rooms.get(currentRoom);
@@ -428,19 +341,8 @@ io.on("connection", (socket) => {
         const wasHost = room.get(peerId)?.isHost;
         room.delete(peerId);
 
-        // Remove from promoted list
-        if (roomPromoted.has(currentRoom)) {
-          const promoted = roomPromoted.get(currentRoom);
-          const filtered = promoted.filter((id) => id !== peerId);
-          if (filtered.length !== promoted.length) {
-            roomPromoted.set(currentRoom, filtered);
-            io.to(currentRoom).emit("promoted-updated", { promotedPeerIds: filtered });
-          }
-        }
-
         if (room.size === 0) {
           rooms.delete(currentRoom);
-          roomPromoted.delete(currentRoom);
         } else {
           // If the host left, promote the earliest-remaining participant
           if (wasHost) {

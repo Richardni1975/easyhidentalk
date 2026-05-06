@@ -71,8 +71,7 @@ export function useWebRTC() {
       stream: MediaStream,
       onIceCandidate: (peerId: string, candidate: RTCIceCandidate) => void,
       onTrack: (peerId: string, stream: MediaStream) => void,
-      onConnectionState: (peerId: string, state: RTCPeerConnectionState) => void,
-      onScreenTrack?: (peerId: string, stream: MediaStream) => void
+      onConnectionState: (peerId: string, state: RTCPeerConnectionState) => void
     ): RTCPeerConnection => {
       // Close existing connection if any
       const existing = peerConnections.current.get(peerId);
@@ -131,7 +130,6 @@ export function useWebRTC() {
           // Different stream ID — this is a screen share track
           screenShareStreamsRef.current.set(peerId, remoteStream);
           setScreenShareStreams(new Map(screenShareStreamsRef.current));
-          onScreenTrack?.(peerId, remoteStream);
         } else {
           // Same stream ID (renegotiation or additional track) — update existing
           setRemoteStreams((prev) => {
@@ -182,23 +180,6 @@ export function useWebRTC() {
     []
   );
 
-  const replaceAudioTrack = useCallback(
-    (newStream: MediaStream) => {
-      const newTrack = newStream.getAudioTracks()[0];
-      if (!newTrack) return;
-
-      peerConnections.current.forEach(({ pc }) => {
-        const sender = pc
-          .getSenders()
-          .find((s) => s.track?.kind === "audio");
-        if (sender) {
-          sender.replaceTrack(newTrack);
-        }
-      });
-    },
-    []
-  );
-
   const addScreenTrack = useCallback((screenStream: MediaStream) => {
     const screenTrack = screenStream.getVideoTracks()[0];
     if (!screenTrack) return;
@@ -215,16 +196,6 @@ export function useWebRTC() {
         console.warn(`Failed to add screen track to peer ${peerId}:`, err);
       }
     });
-  }, []);
-
-  const removeScreenTrack = useCallback(() => {
-    peerConnections.current.forEach(({ pc }, peerId) => {
-      const sender = screenSenders.current.get(peerId);
-      if (sender && sender.track) {
-        sender.track.stop();
-      }
-    });
-    screenSenders.current.clear();
   }, []);
 
   const startScreenShare = useCallback(async () => {
@@ -258,13 +229,21 @@ export function useWebRTC() {
   }, [addScreenTrack]);
 
   const stopScreenShare = useCallback(() => {
+    // Stop all screen tracks in peer connections
+    peerConnections.current.forEach(({ pc }, peerId) => {
+      const sender = screenSenders.current.get(peerId);
+      if (sender && sender.track) {
+        sender.track.stop();
+      }
+    });
+    screenSenders.current.clear();
+
     if (localScreenStreamRef.current) {
       localScreenStreamRef.current.getTracks().forEach((t) => t.stop());
       localScreenStreamRef.current = null;
     }
-    removeScreenTrack();
     setLocalScreenStream(null);
-  }, [removeScreenTrack]);
+  }, []);
 
   // Set ref so onended handler always calls latest stopScreenShare
   stopScreenShareRef.current = stopScreenShare;
@@ -371,7 +350,6 @@ export function useWebRTC() {
     peerConnections,
     startLocalStream,
     createPeerConnection,
-    replaceAudioTrack,
     startScreenShare,
     stopScreenShare,
     clearScreenShareStream,

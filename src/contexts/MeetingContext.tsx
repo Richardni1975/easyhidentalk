@@ -1,21 +1,17 @@
 import { createContext, useContext, useState, useCallback, useRef } from "react";
-import type { Participant, ChatMessage, EmojiEvent } from "../types";
+import type { Participant, ChatMessage } from "../types";
 
 interface MeetingContextType {
-  // State
   roomId: string;
   userName: string;
   participants: Participant[];
   chatMessages: ChatMessage[];
-  emojiEvents: EmojiEvent[];
   isMomo: boolean;
   isMuted: boolean;
   isCameraOff: boolean;
   handRaised: boolean;
-  isScreenSharing: boolean;
   peerId: string;
 
-  // Actions
   setRoomId: (id: string) => void;
   setUserName: (name: string) => void;
   setParticipants: (participants: Participant[]) => void;
@@ -23,12 +19,10 @@ interface MeetingContextType {
   removeParticipant: (peerId: string) => void;
   updateParticipant: (peerId: string, updates: Partial<Participant>) => void;
   addChatMessage: (msg: ChatMessage) => void;
-  addEmojiEvent: (event: EmojiEvent) => void;
   setIsMomo: (isMomo: boolean) => void;
   setIsMuted: (muted: boolean) => void;
   setIsCameraOff: (off: boolean) => void;
   setHandRaised: (raised: boolean) => void;
-  setIsScreenSharing: (sharing: boolean) => void;
   getDisplayName: (participant: Participant) => string;
   generatePeerId: () => string;
 }
@@ -40,12 +34,10 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState("");
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [emojiEvents, setEmojiEvents] = useState<EmojiEvent[]>([]);
   const [isMomo, setIsMomo] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const peerIdRef = useRef(`peer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
 
   const addParticipant = useCallback((participant: Participant) => {
@@ -72,14 +64,6 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
     setChatMessages((prev) => [...prev, msg]);
   }, []);
 
-  const addEmojiEvent = useCallback((event: EmojiEvent) => {
-    setEmojiEvents((prev) => [...prev, event]);
-    // Auto-clear emoji after 2.5s
-    setTimeout(() => {
-      setEmojiEvents((prev) => prev.filter((e) => e !== event));
-    }, 2500);
-  }, []);
-
   const getDisplayName = useCallback(
     (participant: Participant) => {
       return participant.isMomo ? "momo" : participant.realName;
@@ -98,12 +82,10 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
         userName,
         participants,
         chatMessages,
-        emojiEvents,
         isMomo,
         isMuted,
         isCameraOff,
         handRaised,
-        isScreenSharing,
         peerId: peerIdRef.current,
         setRoomId,
         setUserName,
@@ -112,12 +94,10 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
         removeParticipant,
         updateParticipant,
         addChatMessage,
-        addEmojiEvent,
         setIsMomo,
         setIsMuted,
         setIsCameraOff,
         setHandRaised,
-        setIsScreenSharing,
         getDisplayName,
         generatePeerId,
       }}

@@ -15,35 +15,8 @@ export interface ChatMessage {
   senderName: string;
   isMomo: boolean;
   text?: string;
-  audioData?: string; // base64-encoded audio (voice message)
-  duration?: number;  // audio duration in seconds
   timestamp: number;
 }
-
-export interface SharedContent {
-  type: "url" | "text" | "file";
-  content: string;
-  fileName?: string;
-  mimeType?: string;
-  sharedBy: string;
-  senderName: string;
-  timestamp: number;
-}
-
-export interface EmojiEvent {
-  peerId: string;
-  emoji: string;
-}
-
-export interface RoomInfo {
-  roomId: string;
-  participants: Participant[];
-}
-
-export type MediaDeviceState = {
-  audio: boolean;
-  video: boolean;
-};
 
 export interface PollVote {
   peerId: string;
