@@ -38,6 +38,8 @@ const roomPolls = new Map(); // roomId -> Map of pollId -> pollData
 const roomMessages = new Map(); // roomId -> array of chat messages
 const roomPromoted = new Map(); // roomId -> string[] of promoted peerIds
 
+const peerSockets = new Map(); // peerId -> socket.id for direct messaging (offer/answer/ICE)
+
 // Track pending removals (grace period before actually removing a participant)
 const pendingRemovals = new Map(); // peerId -> { timeout, roomId }
 
