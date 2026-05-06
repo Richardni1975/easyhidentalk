@@ -414,6 +414,8 @@ io.on("connection", (socket) => {
       if (pending) clearTimeout(pending.timeout);
 
       const removalTimeout = setTimeout(() => {
+        // If reconnection already cancelled this removal, skip
+        if (!pendingRemovals.has(peerId)) return;
         pendingRemovals.delete(peerId);
         if (!rooms.has(currentRoom)) return;
         if (!room.has(peerId)) return;
