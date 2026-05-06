@@ -18,6 +18,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
   cookie: false,
+  transports: ["websocket"],
 });
 
 // In production, serve the built frontend

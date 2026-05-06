@@ -11,9 +11,7 @@ export function useSocket(roomId: string | undefined) {
     if (!roomId) return;
 
     const socket = io(SIGNALING_SERVER_URL || undefined, {
-      transports: ["polling", "websocket"],
-      upgrade: true,
-      rememberUpgrade: true,
+      transports: ["websocket"],
     });
     socketRef.current = socket;
 
