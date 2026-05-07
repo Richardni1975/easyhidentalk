@@ -122,6 +122,8 @@ export default function ChatPanel({
     onVoiceInputChange?.(false);
   }, [onVoiceInputChange]);
 
+  const sttRetryRef = useRef(0);
+
   const startListening = useCallback(() => {
     const SpeechRecognitionAPI =
       (window as any).SpeechRecognition ||
@@ -137,7 +139,7 @@ export default function ChatPanel({
       return;
     }
 
-    // Notify parent to release WebRTC audio mic
+    // Notify parent to mute audio (don't stop track — let it share the mic)
     onVoiceInputChange?.(true);
 
     const recognition = new SpeechRecognitionAPI();
@@ -182,20 +184,26 @@ export default function ChatPanel({
     };
 
     recognition.onerror = () => {
-      stopStt();
+      // On mobile, the first attempt may fail if the mic was just released.
+      // Retry once automatically.
+      if (sttRetryRef.current < 1) {
+        sttRetryRef.current++;
+        setTimeout(() => {
+          if (!listeningRef.current) return;
+          try { recognition.start(); } catch { stopStt(); }
+        }, 300);
+      } else {
+        stopStt();
+      }
     };
 
     recognition.onend = () => {
       if (listeningRef.current) {
-        // On mobile, delay restart to let mic hardware settle
-        setTimeout(() => {
-          if (!listeningRef.current) return;
-          try {
-            recognition.start();
-          } catch {
-            stopStt();
-          }
-        }, 200);
+        try {
+          recognition.start();
+        } catch {
+          stopStt();
+        }
       } else {
         stopStt();
       }
@@ -203,26 +211,25 @@ export default function ChatPanel({
 
     recognitionRef.current = recognition;
     listeningRef.current = true;
+    sttRetryRef.current = 0;
     setIsListening(true);
-    setInterimText("正在释放麦克风...");
 
-    // On mobile, give the browser time to fully release WebRTC mic hardware.
-    // stopAudioTrackForStt nulls the MediaStream, then the OS needs time
-    // to free the mic before SpeechRecognition can acquire it.
-    const startRecognition = () => {
-      if (!listeningRef.current) return;
-      try {
-        recognition.start();
-        setInterimText("");
-      } catch {
+    // Start immediately — no artificial delay. The track is still alive
+    // (just muted), so STT should get the mic right away.
+    try {
+      recognition.start();
+    } catch {
+      // Synchronous failure — retry once
+      if (sttRetryRef.current < 1) {
+        sttRetryRef.current++;
+        setTimeout(() => {
+          if (!listeningRef.current) return;
+          try { recognition.start(); } catch { stopStt(); }
+        }, 300);
+      } else {
         stopStt();
       }
-    };
-
-    setTimeout(() => {
-      setInterimText("正在启动语音识别...");
-      setTimeout(startRecognition, 400);
-    }, 300);
+    }
   }, [isMomo, onVoiceInputChange, stopStt]);
 
   const handleSend = () => {

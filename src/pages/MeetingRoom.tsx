@@ -57,8 +57,6 @@ function MeetingRoomInner() {
     clearScreenShareStream,
     toggleAudio,
     toggleVideo,
-    stopAudioTrackForStt,
-    restartAudioTrackForStt,
     createOffer,
     handleOffer,
     handleAnswer,
@@ -361,22 +359,20 @@ function MeetingRoomInner() {
     (active: boolean) => {
       if (active) {
         preSttMuteRef.current = isMuted;
-        // Fully release the mic so STT (SpeechRecognition) can access it
-        stopAudioTrackForStt();
+        // Don't stop the audio track — just mute to peers.
+        // The track stays alive so STT (SpeechRecognition) can share the mic
+        // without the delay of re-acquisition.
         setIsMuted(true);
         emit("user-mute", { muted: true });
       } else {
         const restoreMuted = preSttMuteRef.current;
-        // Recreate the audio track and re-add to all peer connections
-        restartAudioTrackForStt().then(() => {
-          if (!restoreMuted) {
-            setIsMuted(false);
-            emit("user-mute", { muted: false });
-          }
-        });
+        if (!restoreMuted) {
+          setIsMuted(false);
+          emit("user-mute", { muted: false });
+        }
       }
     },
-    [isMuted, stopAudioTrackForStt, restartAudioTrackForStt, setIsMuted, emit]
+    [isMuted, setIsMuted, emit]
   );
 
   // Host determination
