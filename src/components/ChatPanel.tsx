@@ -183,15 +183,17 @@ export default function ChatPanel({
       }
     };
 
-    recognition.onerror = () => {
-      // On mobile, the first attempt may fail (audio-capture) because the
-      // OS hasn't fully freed the mic from WebRTC yet. Retry once quickly.
-      if (sttRetryRef.current < 1) {
+    recognition.onerror = (event: any) => {
+      // Only retry for mic-contention errors, not "no-speech" or "aborted"
+      if ((event.error === "audio-capture" || event.error === "not-allowed") && sttRetryRef.current < 3) {
+        const delays = [400, 700, 1200];
+        const delay = delays[sttRetryRef.current];
         sttRetryRef.current++;
+        setInterimText(`正在获取麦克风${".".repeat(sttRetryRef.current)}`);
         setTimeout(() => {
           if (!listeningRef.current) return;
-          try { recognition.start(); } catch { stopStt(); }
-        }, 200);
+          try { recognition.start(); } catch { /* onerror will handle */ }
+        }, delay);
       } else {
         stopStt();
       }
@@ -199,11 +201,11 @@ export default function ChatPanel({
 
     recognition.onend = () => {
       if (listeningRef.current) {
-        try {
-          recognition.start();
-        } catch {
-          stopStt();
-        }
+        // Brief pause before restart so the browser can settle
+        setTimeout(() => {
+          if (!listeningRef.current) return;
+          try { recognition.start(); } catch { stopStt(); }
+        }, 150);
       } else {
         stopStt();
       }
@@ -214,21 +216,16 @@ export default function ChatPanel({
     sttRetryRef.current = 0;
     setIsListening(true);
 
-    // Start immediately — no artificial delay. The track is still alive
-    // (just muted), so STT should get the mic right away.
+    // Start immediately — no artificial delay before first attempt.
+    // If the mic isn't released yet, onerror will retry with increasing delays.
     try {
       recognition.start();
     } catch {
-      // Synchronous failure — retry once
-      if (sttRetryRef.current < 1) {
-        sttRetryRef.current++;
-        setTimeout(() => {
-          if (!listeningRef.current) return;
-          try { recognition.start(); } catch { stopStt(); }
-        }, 300);
-      } else {
-        stopStt();
-      }
+      // Sync failure (rare) — retry once after a pause
+      setTimeout(() => {
+        if (!listeningRef.current) return;
+        try { recognition.start(); } catch { stopStt(); }
+      }, 400);
     }
   }, [isMomo, onVoiceInputChange, stopStt]);
 
