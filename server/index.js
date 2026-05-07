@@ -115,7 +115,10 @@ io.on("connection", (socket) => {
       .filter(([id]) => id !== peerId)
       .map(([id, info]) => ({ peerId: id, ...info }));
 
-    socket.emit("existing-participants", existingParticipants);
+    socket.emit("existing-participants", {
+      participants: existingParticipants,
+      screenSharingPeerId: roomScreenShares.get(roomId) || null,
+    });
 
     // Send existing polls to the new joiner (anonymize momo-mode polls)
     const existingPolls = roomPolls.get(roomId);
@@ -390,6 +393,12 @@ io.on("connection", (socket) => {
 
         const wasHost = room.get(peerId)?.isHost;
         room.delete(peerId);
+
+        // If the disconnected peer was sharing their screen, clean up
+        if (roomScreenShares.get(currentRoom) === peerId) {
+          roomScreenShares.delete(currentRoom);
+          io.to(currentRoom).emit("screen-share-stopped", { peerId });
+        }
 
         if (room.size === 0) {
           rooms.delete(currentRoom);
