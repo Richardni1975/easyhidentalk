@@ -310,7 +310,7 @@ export function useWebRTC() {
           }
           track.enabled = true;
           peerConnections.current.forEach(({ pc }) => {
-            const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+            const sender = pc.getTransceivers().find(t => t.kind === "audio")?.sender;
             if (sender) sender.replaceTrack(track).catch(() => {});
           });
         } catch (err) {
@@ -318,7 +318,7 @@ export function useWebRTC() {
         }
       } else {
         peerConnections.current.forEach(({ pc }) => {
-          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+          const sender = pc.getTransceivers().find(t => t.kind === "audio")?.sender;
           if (sender) sender.replaceTrack(null).catch(() => {});
         });
       }
@@ -357,7 +357,7 @@ export function useWebRTC() {
         stream.removeTrack(track);
       });
       peerConnections.current.forEach(({ pc }) => {
-        const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+        const sender = pc.getTransceivers().find(t => t.kind === "audio")?.sender;
         if (sender) {
           sender.replaceTrack(null).catch(() => {});
         }
@@ -386,7 +386,7 @@ export function useWebRTC() {
         // Re-add tracks to peer connections
         peerConnections.current.forEach(({ pc }) => {
           stream.getTracks().forEach((track) => {
-            const sender = pc.getSenders().find((s) => s.track?.kind === track.kind);
+            const sender = pc.getTransceivers().find(t => t.kind === track.kind)?.sender;
             if (sender) {
               sender.replaceTrack(track).catch(() => {});
             } else {
@@ -410,7 +410,7 @@ export function useWebRTC() {
           localStreamRef.current = stream;
         }
         peerConnections.current.forEach(({ pc }) => {
-          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+          const sender = pc.getTransceivers().find(t => t.kind === "audio")?.sender;
           if (sender) {
             sender.replaceTrack(newTrack).catch(() => {});
           }
@@ -448,7 +448,7 @@ export function useWebRTC() {
           }
           track.enabled = true;
           peerConnections.current.forEach(({ pc }) => {
-            const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+            const sender = pc.getTransceivers().find(t => t.kind === "video")?.sender;
             if (sender) sender.replaceTrack(track).catch(() => {});
           });
         } catch (err) {
@@ -456,7 +456,7 @@ export function useWebRTC() {
         }
       } else {
         peerConnections.current.forEach(({ pc }) => {
-          const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+          const sender = pc.getTransceivers().find(t => t.kind === "video")?.sender;
           if (sender) sender.replaceTrack(null).catch(() => {});
         });
       }
