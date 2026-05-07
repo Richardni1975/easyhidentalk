@@ -11,6 +11,9 @@ interface VideoGridProps {
   speakingPeerId?: string | null;
   videoPriorityPeerIds?: string[];
   screenSharing?: boolean;
+  isHost?: boolean;
+  onForceVideo?: (peerId: string) => void;
+  onHostToggleMomo?: (peerId: string, isMomo: boolean) => void;
 }
 
 export default function VideoGrid({
@@ -21,6 +24,9 @@ export default function VideoGrid({
   speakingPeerId,
   videoPriorityPeerIds,
   screenSharing,
+  isHost,
+  onForceVideo,
+  onHostToggleMomo,
 }: VideoGridProps) {
   const prioritySet = useMemo(
     () => (videoPriorityPeerIds ? new Set(videoPriorityPeerIds) : null),
@@ -155,6 +161,32 @@ export default function VideoGrid({
                   <svg className="w-3 h-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                   </svg>
+                )}
+
+                {/* Host-only action buttons */}
+                {isHost && p.peerId !== localParticipant.peerId && (
+                  <>
+                    <button
+                      onClick={() => onForceVideo?.(p.peerId)}
+                      className="text-blue-400 hover:text-blue-300 transition-colors p-0.5"
+                      title="强制开启摄像头"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => onHostToggleMomo?.(p.peerId, !p.isMomo)}
+                      className={`text-xs font-bold transition-colors p-0.5 w-4 h-4 flex items-center justify-center rounded ${
+                        p.isMomo
+                          ? "text-purple-400 hover:text-purple-300"
+                          : "text-dark-500 hover:text-white"
+                      }`}
+                      title="切换匿名模式"
+                    >
+                      M
+                    </button>
+                  </>
                 )}
               </div>
             </div>

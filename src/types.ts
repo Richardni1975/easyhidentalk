@@ -8,6 +8,7 @@ export interface Participant {
   muted: boolean;
   cameraOff: boolean;
   handRaised: boolean;
+  forcedVideo?: boolean;
 }
 
 export interface ChatMessage {

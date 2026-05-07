@@ -10,6 +10,8 @@ interface ControlBarProps {
   onHangUp: () => void;
   /** Whether to render buttons vertically (desktop center column) */
   vertical?: boolean;
+  /** Only users in the 4 video slots can share screen */
+  canScreenShare?: boolean;
 }
 
 type ButtonStyle = "default" | "danger" | "active" | "warning";
@@ -93,6 +95,7 @@ export default function ControlBar({
   onToggleScreenShare,
   onHangUp,
   vertical,
+  canScreenShare = true,
 }: ControlBarProps) {
   const wrapper = vertical
     ? "flex flex-col items-center gap-5 py-4 px-1"
@@ -120,14 +123,16 @@ export default function ControlBar({
         {isCameraOff ? iconCameraOff : iconCameraOn}
       </button>
 
-      {/* Screen share */}
-      <button
-        onClick={onToggleScreenShare}
-        className={btnClass(isScreenSharing ? "active" : "default")}
-        title={isScreenSharing ? "停止共享" : "共享屏幕"}
-      >
-        {iconScreen}
-      </button>
+      {/* Screen share — only available to users in the 4 video slots */}
+      {canScreenShare && (
+        <button
+          onClick={onToggleScreenShare}
+          className={btnClass(isScreenSharing ? "active" : "default")}
+          title={isScreenSharing ? "停止共享" : "共享屏幕"}
+        >
+          {iconScreen}
+        </button>
+      )}
 
       {/* Hand raise */}
       <button

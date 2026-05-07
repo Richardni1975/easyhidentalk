@@ -124,6 +124,7 @@ function MeetingRoomInner() {
         muted: p.muted,
         cameraOff: p.cameraOff,
         handRaised: p.handRaised,
+        forcedVideo: p.forcedVideo,
       }));
 
       if (existing.length === 0) {
@@ -163,6 +164,7 @@ function MeetingRoomInner() {
         muted: participant.muted,
         cameraOff: participant.cameraOff,
         handRaised: participant.handRaised,
+        forcedVideo: participant.forcedVideo,
       });
     });
 
@@ -209,6 +211,7 @@ function MeetingRoomInner() {
       if (data.isMomo !== undefined) updates.isMomo = data.isMomo;
       if (data.userName !== undefined) updates.userName = data.userName;
       if (data.isHost !== undefined) updates.isHost = data.isHost;
+      if (data.forcedVideo !== undefined) updates.forcedVideo = data.forcedVideo;
       updateParticipant(data.peerId, updates);
     });
 
@@ -243,6 +246,13 @@ function MeetingRoomInner() {
     const unsubScreenStopped = on("screen-share-stopped", (data: { peerId: string }) => {
       clearScreenShareStream(data.peerId);
       setScreenSharingPeerId((prev) => (prev === data.peerId ? null : prev));
+    });
+
+    // Host forced camera on
+    const unsubForceCam = on("forced-camera-on", () => {
+      setIsCameraOff(false);
+      toggleVideo(true);
+      emit("user-camera", { cameraOff: false });
     });
 
     // Poll events
@@ -283,6 +293,7 @@ function MeetingRoomInner() {
       unsubExistingMsgs();
       unsubScreenStarted();
       unsubScreenStopped();
+      unsubForceCam();
       unsubPollCreated();
       unsubPollUpdated();
       unsubPollClosed();
@@ -372,6 +383,14 @@ function MeetingRoomInner() {
     emit("stop-screen-share");
   }, [stopScreenShare, emit]);
 
+  const handleForceVideo = useCallback((targetPeerId: string) => {
+    emit("host-force-video", { targetPeerId });
+  }, [emit]);
+
+  const handleHostToggleMomo = useCallback((targetPeerId: string, isMomo: boolean) => {
+    emit("host-toggle-momo", { targetPeerId, isMomo });
+  }, [emit]);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Ensure mobile starts at chat panel (leftmost)
@@ -443,7 +462,7 @@ function MeetingRoomInner() {
     [participants, peerId]
   );
 
-  // 4 video slot priority: host > speaker > hand-raisers > join order
+  // 4 video slot priority: host > speaker > forcedVideo > hand-raisers > join order
   const videoPriorityPeerIds = useMemo(() => {
     const maxSlots = 4;
     const priority = new Set<string>();
@@ -456,6 +475,8 @@ function MeetingRoomInner() {
     const remaining = participants
       .filter((p) => !priority.has(p.peerId))
       .sort((a, b) => {
+        if (a.forcedVideo && !b.forcedVideo) return -1;
+        if (!a.forcedVideo && b.forcedVideo) return 1;
         if (a.handRaised && !b.handRaised) return -1;
         if (!a.handRaised && b.handRaised) return 1;
         return (a.joinedAt || 0) - (b.joinedAt || 0);
@@ -472,6 +493,12 @@ function MeetingRoomInner() {
 
     return Array.from(priority);
   }, [participants, hostPeerId, speakingPeerId, peerId]);
+
+  // Only users in the 4 video slots can share screen
+  const canScreenShare = useMemo(
+    () => videoPriorityPeerIds.includes(peerId),
+    [videoPriorityPeerIds, peerId]
+  );
 
   // Screen share display stream
   const activeScreenStream = useMemo(() => {
@@ -596,6 +623,7 @@ function MeetingRoomInner() {
             onToggleScreenShare={handleToggleScreenShare}
             onHangUp={handleHangUp}
             vertical={true}
+            canScreenShare={canScreenShare}
           />
         </div>
 
@@ -645,6 +673,9 @@ function MeetingRoomInner() {
                 participants={remoteParticipants}
                 speakingPeerId={speakingPeerId}
                 videoPriorityPeerIds={videoPriorityPeerIds}
+                isHost={hostPeerId === peerId}
+                onForceVideo={handleForceVideo}
+                onHostToggleMomo={handleHostToggleMomo}
               />
             )}
           </div>
@@ -669,6 +700,7 @@ function MeetingRoomInner() {
               onToggleScreenShare={handleToggleScreenShare}
               onHangUp={handleHangUp}
               vertical={false}
+              canScreenShare={canScreenShare}
             />
           </div>
         </div>

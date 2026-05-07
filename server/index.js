@@ -226,6 +226,47 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("host-force-video", ({ targetPeerId }) => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    const sender = room?.get(currentPeerId);
+    if (!sender || sender.isHost !== true) return;
+    const target = room?.get(targetPeerId);
+    if (!target) return;
+
+    target.forcedVideo = true;
+
+    // Tell the target to turn on their camera
+    const targetSocketId = peerSockets.get(targetPeerId);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("forced-camera-on");
+    }
+
+    // Broadcast the forcedVideo flag
+    io.to(currentRoom).emit("user-updated", {
+      peerId: targetPeerId,
+      forcedVideo: true,
+    });
+  });
+
+  socket.on("host-toggle-momo", ({ targetPeerId, isMomo }) => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    const sender = room?.get(currentPeerId);
+    if (!sender || sender.isHost !== true) return;
+    const target = room?.get(targetPeerId);
+    if (!target) return;
+
+    target.isMomo = isMomo;
+    target.userName = isMomo ? "momo" : target.realName;
+
+    io.to(currentRoom).emit("user-updated", {
+      peerId: targetPeerId,
+      isMomo,
+      userName: isMomo ? "momo" : target.realName,
+    });
+  });
+
   socket.on("start-screen-share", () => {
     if (!currentRoom) return;
     socket.to(currentRoom).emit("screen-share-started", {
