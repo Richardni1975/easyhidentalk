@@ -73,7 +73,6 @@ export default function ChatPanel({
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const listeningRef = useRef(false);
-  const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Poll state
   const [showPollForm, setShowPollForm] = useState(false);
@@ -109,10 +108,6 @@ export default function ChatPanel({
       listeningRef.current = false;
       recognitionRef.current?.stop();
       recognitionRef.current = null;
-      if (autoSendTimerRef.current) {
-        clearTimeout(autoSendTimerRef.current);
-        autoSendTimerRef.current = null;
-      }
     };
   }, []);
 
@@ -124,10 +119,6 @@ export default function ChatPanel({
     setIsListening(false);
     setInterimText("");
     setVoiceColoredText([]);
-    if (autoSendTimerRef.current) {
-      clearTimeout(autoSendTimerRef.current);
-      autoSendTimerRef.current = null;
-    }
     onVoiceInputChange?.(false);
   }, [onVoiceInputChange]);
 
@@ -192,19 +183,6 @@ export default function ChatPanel({
           if (!(trimmed.length <= 3 && /^[a-z]+$/i.test(trimmed))) {
             setInput((prev) => prev + finalText);
             setVoiceColoredText([]);
-            // Reset auto-send timer: 2s after last final result, send automatically
-            if (autoSendTimerRef.current) {
-              clearTimeout(autoSendTimerRef.current);
-            }
-            autoSendTimerRef.current = setTimeout(() => {
-              autoSendTimerRef.current = null;
-              const text = inputRef.current?.value?.trim();
-              if (text) {
-                onSend(text);
-                setInput("");
-                setVoiceColoredText([]);
-              }
-            }, 2000);
           }
         }
 
@@ -308,10 +286,6 @@ export default function ChatPanel({
     onSend(text);
     setInput("");
     setVoiceColoredText([]);
-    if (autoSendTimerRef.current) {
-      clearTimeout(autoSendTimerRef.current);
-      autoSendTimerRef.current = null;
-    }
   };
 
   const handleExport = () => {
@@ -827,13 +801,7 @@ export default function ChatPanel({
             ref={inputRef}
             type="text"
             value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              if (autoSendTimerRef.current) {
-                clearTimeout(autoSendTimerRef.current);
-                autoSendTimerRef.current = null;
-              }
-            }}
+            onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder={isMomo ? "momo 说点什么..." : "输入消息，或点击麦克风语音输入..."}
             className="flex-1 bg-dark-700 rounded-lg px-3 py-2 text-white text-sm placeholder-dark-500 border border-dark-600 focus:border-blue-500 focus:outline-none"
