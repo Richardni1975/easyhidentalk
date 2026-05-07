@@ -147,11 +147,13 @@ export default function ChatPanel({
     setIsListening(true);
     setInterimText("正在释放麦克风...");
 
-    // Each retry delay in ms. On mobile the mic can take several seconds to release,
-    // so we keep trying with fresh instances for up to ~10s total.
-    const RETRY_DELAYS = [600, 600, 1000, 1500, 2500, 4000];
+    // Delays between getUserMedia probes (ms).
+    // We probe with getUserMedia instead of blindly retrying SpeechRecognition
+    // because getUserMedia gives a definitive yes/no on mic availability.
+    const PROBE_DELAYS = [500, 500, 1000, 1500, 2000, 3000, 4000, 5000];
 
-    const attempt = () => {
+    // Start a fresh SpeechRecognition instance (called after mic is confirmed free)
+    const startRecog = () => {
       if (!listeningRef.current) return;
 
       const recog = new SpeechRecognitionAPI();
@@ -159,10 +161,9 @@ export default function ChatPanel({
       recog.interimResults = true;
       recog.continuous = false;
 
-      let hadRetryableError = false;
+      let errored = false;
 
       recog.onresult = (event: any) => {
-        // Recognition is working — clear any status text
         setInterimText("");
 
         let finalText = "";
@@ -178,7 +179,6 @@ export default function ChatPanel({
         }
 
         if (finalText) {
-          // Skip noise: short lowercase-only ASCII strings (e.g. "nn" from background noise)
           const trimmed = finalText.trim();
           if (!(trimmed.length <= 3 && /^[a-z]+$/i.test(trimmed))) {
             setInput((prev) => prev + finalText);
@@ -202,55 +202,73 @@ export default function ChatPanel({
 
       recog.onerror = (event: any) => {
         if (event.error === "audio-capture" || event.error === "not-allowed") {
-          hadRetryableError = true;
-          if (sttRetryRef.current < RETRY_DELAYS.length) {
-            const delay = RETRY_DELAYS[sttRetryRef.current];
+          errored = true;
+          if (sttRetryRef.current < PROBE_DELAYS.length) {
+            const delay = PROBE_DELAYS[sttRetryRef.current];
             sttRetryRef.current++;
-            const dots = Math.min(sttRetryRef.current, 5);
-            setInterimText(`正在获取麦克风${".".repeat(dots)}`);
-            setTimeout(attempt, delay);
+            setInterimText(`正在获取麦克风${".".repeat(Math.min(sttRetryRef.current, 5))}`);
+            setTimeout(probe, delay);
           } else {
-            // All retries exhausted
             setInterimText("无法获取麦克风，请重试");
             setTimeout(() => stopStt(), 1500);
           }
         } else if (event.error !== "no-speech" && event.error !== "aborted") {
-          // Non-recoverable error — stop
           stopStt();
         }
-        // no-speech / aborted: do nothing, onend will handle
       };
 
       recog.onend = () => {
         if (!listeningRef.current) return;
-        if (hadRetryableError) return; // Error retry path already scheduled a new attempt
-        // Normal end — restart this instance for continuous listening
-        setTimeout(() => {
-          if (!listeningRef.current) return;
-          try { recog.start(); } catch { stopStt(); }
-        }, 100);
+        if (errored) return; // error handler already scheduled a retry
+        // Normal end — start a fresh instance for continuous listening
+        setTimeout(startRecog, 100);
       };
 
       try {
         recog.start();
         recognitionRef.current = recog;
-        // Clear "releasing mic" status now that we've started
         setInterimText("");
       } catch {
-        // Sync start failure (rare) — schedule a retry
-        if (sttRetryRef.current < RETRY_DELAYS.length) {
-          const delay = RETRY_DELAYS[sttRetryRef.current];
-          sttRetryRef.current++;
-          setTimeout(attempt, delay);
+        errored = true;
+        if (sttRetryRef.current < PROBE_DELAYS.length) {
+          setTimeout(probe, PROBE_DELAYS[sttRetryRef.current++]);
         } else {
           stopStt();
         }
       }
     };
 
-    // First attempt after a short delay to let the mic hardware release
-    sttRetryRef.current = 1;
-    setTimeout(attempt, RETRY_DELAYS[0]);
+    // Probe mic availability with getUserMedia — this tells us definitively
+    // whether the hardware has been released by WebRTC.
+    const probe = () => {
+      if (!listeningRef.current) return;
+
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((probeStream) => {
+          // Mic is free! Release probe immediately.
+          probeStream.getTracks().forEach((t) => t.stop());
+          if (!listeningRef.current) return;
+
+          // Small gap so the browser can reassign the mic from probe → SpeechRecognition
+          setTimeout(startRecog, 200);
+        })
+        .catch(() => {
+          // Mic still busy — probe again after a delay
+          if (sttRetryRef.current < PROBE_DELAYS.length) {
+            const delay = PROBE_DELAYS[sttRetryRef.current];
+            sttRetryRef.current++;
+            setInterimText(`正在获取麦克风${".".repeat(Math.min(sttRetryRef.current, 5))}`);
+            setTimeout(probe, delay);
+          } else {
+            setInterimText("无法获取麦克风，请重试");
+            setTimeout(() => stopStt(), 1500);
+          }
+        });
+    };
+
+    // Start probing after a short delay to let WebRTC release its tracks
+    setTimeout(probe, 500);
   }, [isMomo, onVoiceInputChange, stopStt]);
 
   const handleSend = () => {
