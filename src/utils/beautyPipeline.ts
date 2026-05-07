@@ -125,10 +125,21 @@ export class BeautyPipeline {
     const ctx = this.ctx!;
     const offCtx = this.offCtx!;
 
+    // Use actual video dimensions to preserve aspect ratio
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh) return;
+
+    // Match canvas to video aspect ratio (resize only when needed)
+    if (this.canvas.width !== vw || this.canvas.height !== vh) {
+      this.canvas.width = vw;
+      this.canvas.height = vh;
+    }
+
     // How much to downscale: at intensity=1 → 1/8 resolution, at intensity=0 → 1/1
     const scale = 1 / (1 + intensity * 7); // 1× to 8× reduction
-    const lw = Math.max(1, Math.round(this.width * scale));
-    const lh = Math.max(1, Math.round(this.height * scale));
+    const lw = Math.max(1, Math.round(vw * scale));
+    const lh = Math.max(1, Math.round(vh * scale));
 
     // Set offscreen size to low resolution
     if (this.offscreen.width !== lw || this.offscreen.height !== lh) {
@@ -143,11 +154,11 @@ export class BeautyPipeline {
     // Step 2: Scale back up with heavy smoothing → soft painted look
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(this.offscreen, 0, 0, this.width, this.height);
+    ctx.drawImage(this.offscreen, 0, 0, vw, vh);
 
     // Step 3: Optional vibrance boost (oil painting color feel)
     if (vibrance > 0) {
-      const imageData = ctx.getImageData(0, 0, this.width, this.height);
+      const imageData = ctx.getImageData(0, 0, vw, vh);
       const d = imageData.data;
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i], g = d[i + 1], b = d[i + 2];
