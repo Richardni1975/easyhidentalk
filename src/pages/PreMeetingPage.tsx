@@ -77,7 +77,7 @@ export default function PreMeetingPage() {
       {/* Header */}
       <div className="px-6 py-4 border-b border-dark-800">
         <h1 className="text-xl font-semibold text-white">
-          会议室：<span className="text-blue-400 font-mono">{roomId}</span>
+          会议室名称：<span className="text-blue-400 font-mono">{roomId}</span>
         </h1>
       </div>
 
@@ -88,9 +88,6 @@ export default function PreMeetingPage() {
 
           {/* Name Input */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
-              Your name
-            </label>
             <input
               type="text"
               value={name}
@@ -160,7 +157,7 @@ export default function PreMeetingPage() {
               <div className="flex items-center gap-3">
                 <MomoAvatar size={40} />
                 <div>
-                  <p className="text-white font-medium">Join as Momo</p>
+                  <p className="text-white font-medium">我要匿名参会</p>
                   <p className="text-dark-400 text-xs">
                     匿名身份
                   </p>
