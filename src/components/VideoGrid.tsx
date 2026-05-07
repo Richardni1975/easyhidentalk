@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import VideoTile from "./VideoTile";
-import MomoAvatar from "./MomoAvatar";
 import type { Participant } from "../types";
 
 interface VideoGridProps {
@@ -74,17 +73,13 @@ export default function VideoGrid({
             key={p.peerId}
             className="flex items-center gap-1.5 flex-shrink-0 px-2 py-1 rounded-lg bg-dark-800/80"
           >
-            {p.isMomo ? (
-              <MomoAvatar size={24} />
-            ) : (
-              <div className="w-6 h-6 rounded-full bg-dark-600 flex items-center justify-center flex-shrink-0">
-                <span className="text-[10px] font-bold text-dark-300">
-                  {p.realName?.charAt(0).toUpperCase() || "?"}
-                </span>
-              </div>
-            )}
+            <div className="w-6 h-6 rounded-full bg-dark-600 flex items-center justify-center flex-shrink-0">
+              <span className="text-[10px] font-bold text-dark-300">
+                {p.realName?.charAt(0).toUpperCase() || "?"}
+              </span>
+            </div>
             <span className="text-xs text-dark-300 truncate max-w-[60px]">
-              {p.isMomo ? "momo" : p.realName}
+              {p.realName}
               {p.peerId === localParticipant.peerId && <span className="text-dark-500"> (你)</span>}
             </span>
             {p.handRaised && <span className="text-yellow-400 text-xs">✋</span>}
@@ -131,18 +126,14 @@ export default function VideoGrid({
               key={p.peerId}
               className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-dark-800 transition-colors"
             >
-              {p.isMomo ? (
-                <MomoAvatar size={28} />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-dark-600 flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-dark-300">
-                    {p.realName?.charAt(0).toUpperCase() || "?"}
-                  </span>
-                </div>
-              )}
+              <div className="w-7 h-7 rounded-full bg-dark-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-dark-300">
+                  {p.realName?.charAt(0).toUpperCase() || "?"}
+                </span>
+              </div>
 
               <span className="text-xs text-dark-300 truncate min-w-0 flex-1">
-                {p.isMomo ? "momo" : p.realName}
+                {p.realName}
                 {p.peerId === localParticipant.peerId && (
                   <span className="text-dark-500"> (你)</span>
                 )}

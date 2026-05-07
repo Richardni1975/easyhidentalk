@@ -98,7 +98,7 @@ io.on("connection", (socket) => {
 
     const participantInfo = {
       peerId,
-      userName: isMomo ? "momo" : userName,
+      userName,
       realName: userName,
       isMomo,
       isHost,
@@ -198,7 +198,6 @@ io.on("connection", (socket) => {
       io.to(currentRoom).emit("user-updated", {
         peerId: currentPeerId,
         isMomo,
-        userName: isMomo ? "momo" : participant.realName,
       });
     }
   });
@@ -265,12 +264,10 @@ io.on("connection", (socket) => {
     if (!target) return;
 
     target.isMomo = isMomo;
-    target.userName = isMomo ? "momo" : target.realName;
 
     io.to(currentRoom).emit("user-updated", {
       peerId: targetPeerId,
       isMomo,
-      userName: isMomo ? "momo" : target.realName,
     });
   });
 

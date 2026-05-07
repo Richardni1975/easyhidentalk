@@ -6,6 +6,7 @@ import { useWebRTC } from "../hooks/useWebRTC";
 import VideoGrid from "../components/VideoGrid";
 import ControlBar from "../components/ControlBar";
 import ChatPanel from "../components/ChatPanel";
+import { useBeautyFilter } from "../hooks/useBeautyFilter";
 import type { Participant, ChatMessage, Poll } from "../types";
 import PollResultsModal from "../components/PollResultsModal";
 import PollBrowserModal from "../components/PollBrowserModal";
@@ -64,6 +65,7 @@ function MeetingRoomInner() {
     handleOffer,
     handleAnswer,
     addIceCandidate,
+    replaceVideoTrack,
     cleanupAll,
   } = useWebRTC();
 
@@ -210,7 +212,6 @@ function MeetingRoomInner() {
     const unsubUpdated = on("user-updated", (data: any) => {
       const updates: Partial<Participant> = {};
       if (data.isMomo !== undefined) updates.isMomo = data.isMomo;
-      if (data.userName !== undefined) updates.userName = data.userName;
       if (data.isHost !== undefined) updates.isHost = data.isHost;
       if (data.forcedVideo !== undefined) updates.forcedVideo = data.forcedVideo;
       updateParticipant(data.peerId, updates);
@@ -442,6 +443,19 @@ function MeetingRoomInner() {
     [stopAudioTrackForStt, restartAudioTrackForStt, setIsMuted, emit]
   );
 
+  // Beauty filter
+  const {
+    beautyStream,
+    isBeautyOn,
+    toggleBeauty,
+  } = useBeautyFilter(localStream, { replaceVideoTrack });
+
+  // Effective video stream for local display (beauty-processed if active)
+  const displayStream = useMemo(
+    () => (isBeautyOn && beautyStream ? beautyStream : localStream),
+    [isBeautyOn, beautyStream, localStream]
+  );
+
   // Host determination
   const hostPeerId = useMemo(() => {
     if (amHostRef.current) return peerId;
@@ -453,7 +467,7 @@ function MeetingRoomInner() {
   const localParticipant = useMemo<Participant>(
     () => ({
       peerId,
-      userName: isMomo ? "momo" : userName,
+      userName,
       realName: userName,
       isMomo,
       isHost: hostPeerId === peerId,
@@ -633,6 +647,8 @@ function MeetingRoomInner() {
             canScreenShare={canScreenShare}
             includeSystemAudio={includeSystemAudio}
             onToggleSystemAudio={() => setIncludeSystemAudio((v) => !v)}
+            beautyEnabled={isBeautyOn}
+            onToggleBeauty={toggleBeauty}
           />
         </div>
 
@@ -677,7 +693,7 @@ function MeetingRoomInner() {
             ) : (
               <VideoGrid
                 localParticipant={localParticipant}
-                localStream={localStream}
+                localStream={displayStream}
                 remoteStreams={remoteStreams}
                 participants={remoteParticipants}
                 speakingPeerId={speakingPeerId}
@@ -712,6 +728,8 @@ function MeetingRoomInner() {
               canScreenShare={canScreenShare}
               includeSystemAudio={includeSystemAudio}
               onToggleSystemAudio={() => setIncludeSystemAudio((v) => !v)}
+              beautyEnabled={isBeautyOn}
+              onToggleBeauty={toggleBeauty}
             />
           </div>
         </div>

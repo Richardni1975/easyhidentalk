@@ -1,6 +1,5 @@
 import { useRef, useEffect } from "react";
 import type { Participant } from "../types";
-import MomoAvatar from "./MomoAvatar";
 
 interface VideoTileProps {
   participant: Participant;
@@ -49,33 +48,25 @@ export default function VideoTile({
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-dark-800">
-          {participant.isMomo ? (
-            <MomoAvatar size={80} />
-          ) : (
-            <div className="w-20 h-20 rounded-full bg-dark-600 flex items-center justify-center">
-              <span className="text-3xl text-dark-300 font-bold">
-                {participant.realName?.charAt(0).toUpperCase() || "?"}
-              </span>
-            </div>
-          )}
+          <div className="w-20 h-20 rounded-full bg-dark-600 flex items-center justify-center">
+            <span className="text-3xl text-dark-300 font-bold">
+              {participant.realName?.charAt(0).toUpperCase() || "?"}
+            </span>
+          </div>
         </div>
       )}
 
       {/* Bottom overlay */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-8">
         <div className="flex items-center gap-2">
-          {participant.isMomo ? (
-            <MomoAvatar size={24} />
-          ) : (
-            <div className="w-6 h-6 rounded-full bg-dark-500 flex items-center justify-center">
-              <span className="text-xs font-bold text-white">
-                {participant.realName?.charAt(0).toUpperCase() || "?"}
-              </span>
-            </div>
-          )}
+          <div className="w-6 h-6 rounded-full bg-dark-500 flex items-center justify-center">
+            <span className="text-xs font-bold text-white">
+              {participant.realName?.charAt(0).toUpperCase() || "?"}
+            </span>
+          </div>
 
           <span className="text-white text-sm font-medium drop-shadow-lg">
-            {participant.isMomo ? "momo" : participant.realName}
+            {participant.realName}
             {isLocal && " (你)"}
           </span>
 
@@ -92,12 +83,6 @@ export default function VideoTile({
         </div>
       </div>
 
-      {/* Momo badge */}
-      {participant.isMomo && (
-        <div className="absolute top-2 right-2 bg-purple-600/80 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] font-medium text-white">
-          Momo
-        </div>
-      )}
     </div>
   );
 }
