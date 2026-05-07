@@ -17,6 +17,42 @@ interface ChatPanelProps {
   onToggleMomo?: () => void;
 }
 
+/** Auto-punctuate Chinese/English speech recognition output */
+function addPunctuation(text: string): string {
+  const t = text.trim();
+  if (!t) return t;
+
+  // If it already ends with sentence-ending punctuation, return as-is
+  if (/[。？！!?.…]$/.test(t)) return t;
+
+  try {
+    const segmenter = new Intl.Segmenter("zh-CN", { granularity: "sentence" });
+    const segments = Array.from(segmenter.segment(t));
+    return segments
+      .map((s) => {
+        const seg = s.segment.trim();
+        if (!seg) return "";
+        // Already has punctuation
+        if (/[。？！!?]$/.test(seg)) return seg;
+        // Question: ends with question particle or pattern
+        if (/[吗呢么]|什么|怎么|哪[位里]|谁|啥|多[少久大长]|几[点个]|为什么|如何|能否|是不是|有没有|会不会|要不要|能不能$/.test(seg.slice(-6))) {
+          return seg + "？";
+        }
+        // Exclamation: short emphatic utterance
+        if (/^[啊哦哇呀哎哟哈嘿嗯]+$/.test(seg) || /[吧嘛哦]$/.test(seg)) {
+          return seg + "！";
+        }
+        // Default: full stop
+        return seg + "。";
+      })
+      .join("");
+  } catch {
+    // Fallback for browsers without Intl.Segmenter
+    if (/[吗呢么]|什么|怎么|哪[位里]|谁|啥/.test(t.slice(-6))) return t + "？";
+    return t + "。";
+  }
+}
+
 // Random bright color for momo voice input obfuscation
 function randomMomoColor(): string {
   const hue = Math.floor(Math.random() * 360);
@@ -181,7 +217,7 @@ export default function ChatPanel({
         if (finalText) {
           const trimmed = finalText.trim();
           if (!(trimmed.length <= 3 && /^[a-z]+$/i.test(trimmed))) {
-            setInput((prev) => prev + finalText);
+            setInput((prev) => prev + addPunctuation(finalText));
             setVoiceColoredText([]);
           }
         }
