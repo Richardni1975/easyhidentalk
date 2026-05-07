@@ -137,7 +137,7 @@ export default function ChatPanel({
       return;
     }
 
-    // Notify parent to mute WebRTC audio (prevent mic contention)
+    // Notify parent to release WebRTC audio mic
     onVoiceInputChange?.(true);
 
     const recognition = new SpeechRecognitionAPI();
@@ -187,11 +187,15 @@ export default function ChatPanel({
 
     recognition.onend = () => {
       if (listeningRef.current) {
-        try {
-          recognition.start();
-        } catch {
-          stopStt();
-        }
+        // On mobile, delay restart to let mic hardware settle
+        setTimeout(() => {
+          if (!listeningRef.current) return;
+          try {
+            recognition.start();
+          } catch {
+            stopStt();
+          }
+        }, 400);
       } else {
         stopStt();
       }
@@ -199,8 +203,19 @@ export default function ChatPanel({
 
     recognitionRef.current = recognition;
     listeningRef.current = true;
-    recognition.start();
     setIsListening(true);
+    setInterimText("正在准备语音识别...");
+
+    // On mobile, delay STT start to let browser release WebRTC mic hardware
+    setTimeout(() => {
+      if (!listeningRef.current) return;
+      try {
+        recognition.start();
+        setInterimText("");
+      } catch {
+        stopStt();
+      }
+    }, 500);
   }, [isMomo, onVoiceInputChange, stopStt]);
 
   const handleSend = () => {
