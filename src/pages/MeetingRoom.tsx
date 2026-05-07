@@ -462,6 +462,21 @@ function MeetingRoomInner() {
     return null;
   }, [localScreenStream, screenShareStreams, screenSharingPeerId, peerId]);
 
+  // Who is sharing their screen
+  const sharerName = useMemo(() => {
+    if (!screenSharingPeerId) return null;
+    if (screenSharingPeerId === peerId) return "你";
+    const p = participants.find((p) => p.peerId === screenSharingPeerId);
+    return p ? (p.isMomo ? "momo" : p.realName) : "某人";
+  }, [screenSharingPeerId, participants, peerId]);
+
+  // Auto-scroll to video panel on mobile when screen sharing starts
+  useEffect(() => {
+    if (activeScreenStream && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = scrollContainerRef.current.scrollWidth;
+    }
+  }, [activeScreenStream]);
+
   // Poll callbacks
   const handleCreatePoll = useCallback(
     (question: string, optionsTexts: string[], votingMode: string) => {
@@ -540,10 +555,12 @@ function MeetingRoomInner() {
             onToggleMomo={handleToggleMomo}
           />
 
-          {/* Mobile swipe hint */}
-          <div className="md:hidden text-center py-1 text-dark-500 text-xs flex-shrink-0">
-            &larr; 向左滑动，进入视频聊天
-          </div>
+          {/* Mobile swipe hint — hidden during screen share */}
+          {!activeScreenStream && (
+            <div className="md:hidden text-center py-1 text-dark-500 text-xs flex-shrink-0">
+              &larr; 向左滑动，进入视频聊天
+            </div>
+          )}
         </div>
 
         {/* DESKTOP: Vertical control buttons */}
@@ -567,41 +584,38 @@ function MeetingRoomInner() {
           {/* Video content */}
           <div className="flex-1 flex flex-col min-h-0">
             {activeScreenStream ? (
-              /* Screen share active */
-              <div className="flex-1 flex flex-col min-h-0">
-                <div className="flex-1 bg-dark-950 flex items-center justify-center relative">
-                  <video
-                    autoPlay
-                    playsInline
-                    muted={screenSharingPeerId === peerId}
-                    className="w-full h-full object-contain"
-                    ref={(el) => {
-                      if (el && el.srcObject !== activeScreenStream) {
-                        el.srcObject = activeScreenStream;
-                      }
-                    }}
-                  />
-                  {screenSharingPeerId === peerId && (
-                    <button
-                      onClick={handleStopScreenShare}
-                      className="absolute top-3 right-3 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-colors flex items-center gap-1.5"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      停止共享
-                    </button>
-                  )}
-                </div>
-                <VideoGrid
-                  localParticipant={localParticipant}
-                  localStream={localStream}
-                  remoteStreams={remoteStreams}
-                  participants={remoteParticipants}
-                  speakingPeerId={speakingPeerId}
-                  videoPriorityPeerIds={videoPriorityPeerIds}
-                  screenSharing={true}
+              /* Screen share active — full area, no video tiles */
+              <div className="flex-1 bg-dark-950 flex items-center justify-center relative">
+                <video
+                  autoPlay
+                  playsInline
+                  muted={screenSharingPeerId === peerId}
+                  className="w-full h-full object-contain"
+                  ref={(el) => {
+                    if (el && el.srcObject !== activeScreenStream) {
+                      el.srcObject = activeScreenStream;
+                    }
+                  }}
                 />
+                {/* Sharer indicator */}
+                <div className="absolute top-3 left-3 px-2.5 py-1.5 bg-dark-900/70 backdrop-blur-sm rounded-lg text-white text-xs flex items-center gap-2">
+                  <svg className="w-3.5 h-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span>{sharerName} 正在共享屏幕</span>
+                </div>
+                {/* Stop button for local sharer */}
+                {screenSharingPeerId === peerId && (
+                  <button
+                    onClick={handleStopScreenShare}
+                    className="absolute top-3 right-3 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-colors flex items-center gap-1.5"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    停止共享
+                  </button>
+                )}
               </div>
             ) : (
               <VideoGrid
@@ -615,10 +629,12 @@ function MeetingRoomInner() {
             )}
           </div>
 
-          {/* Mobile swipe hint */}
-          <div className="md:hidden text-center py-1 text-dark-500 text-xs flex-shrink-0">
-            &rarr; 向右滑动，进入文字聊天
-          </div>
+          {/* Mobile swipe hint — hidden during screen share */}
+          {!activeScreenStream && (
+            <div className="md:hidden text-center py-1 text-dark-500 text-xs flex-shrink-0">
+              &rarr; 向右滑动，进入文字聊天
+            </div>
+          )}
 
           {/* Mobile: bottom control bar */}
           <div className="md:hidden flex items-center justify-center py-2 px-4 bg-dark-900/80 border-t border-dark-800 flex-shrink-0">
