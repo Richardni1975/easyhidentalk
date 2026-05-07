@@ -57,6 +57,8 @@ function MeetingRoomInner() {
     clearScreenShareStream,
     toggleAudio,
     toggleVideo,
+    stopAudioTrackForStt,
+    restartAudioTrackForStt,
     createOffer,
     handleOffer,
     handleAnswer,
@@ -359,20 +361,23 @@ function MeetingRoomInner() {
     (active: boolean) => {
       if (active) {
         preSttMuteRef.current = isMuted;
-        // Don't stop the audio track — just mute to peers.
-        // The track stays alive so STT (SpeechRecognition) can share the mic
-        // without the delay of re-acquisition.
+        // Release the WebRTC audio track so SpeechRecognition can access the mic.
+        // The ChatPanel will retry if STT doesn't start immediately.
+        stopAudioTrackForStt();
         setIsMuted(true);
         emit("user-mute", { muted: true });
       } else {
         const restoreMuted = preSttMuteRef.current;
-        if (!restoreMuted) {
-          setIsMuted(false);
-          emit("user-mute", { muted: false });
-        }
+        // Recreate the audio track
+        restartAudioTrackForStt().then(() => {
+          if (!restoreMuted) {
+            setIsMuted(false);
+            emit("user-mute", { muted: false });
+          }
+        });
       }
     },
-    [isMuted, setIsMuted, emit]
+    [isMuted, stopAudioTrackForStt, restartAudioTrackForStt, setIsMuted, emit]
   );
 
   // Host determination

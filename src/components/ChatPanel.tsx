@@ -139,7 +139,7 @@ export default function ChatPanel({
       return;
     }
 
-    // Notify parent to mute audio (don't stop track — let it share the mic)
+    // Notify parent to release the WebRTC mic so STT can access it
     onVoiceInputChange?.(true);
 
     const recognition = new SpeechRecognitionAPI();
@@ -184,14 +184,14 @@ export default function ChatPanel({
     };
 
     recognition.onerror = () => {
-      // On mobile, the first attempt may fail if the mic was just released.
-      // Retry once automatically.
+      // On mobile, the first attempt may fail (audio-capture) because the
+      // OS hasn't fully freed the mic from WebRTC yet. Retry once quickly.
       if (sttRetryRef.current < 1) {
         sttRetryRef.current++;
         setTimeout(() => {
           if (!listeningRef.current) return;
           try { recognition.start(); } catch { stopStt(); }
-        }, 300);
+        }, 200);
       } else {
         stopStt();
       }
