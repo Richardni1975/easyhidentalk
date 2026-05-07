@@ -156,6 +156,15 @@ export default function ChatPanel({
     // Tracks probe success → startRecog failure cycles for mobile diagnostics
     let probeSuccessCount = 0;
 
+    // Simple Chinese punctuation heuristic — detects question/exclamation keywords
+    const smartPunct = (text: string): string => {
+      const qWords = ["吗", "呢", "什么", "怎么", "谁", "哪", "为什么", "多少", "几", "何", "是否", "能否", "要不要", "行不行", "对不对", "能不能", "会不会", "有没有"];
+      const eWords = ["太", "真", "好", "啊", "呀", "哇", "棒", "美", "极了", "天哪"];
+      for (const w of qWords) { if (text.includes(w)) return text + "？"; }
+      for (const w of eWords) { if (text.includes(w)) return text + "！"; }
+      return text + "。";
+    };
+
     // Limits auto-restart loops when mobile ignores continuous: true
     let consecutiveRestarts = 0;
     const MAX_RESTARTS = 5;
@@ -192,7 +201,7 @@ export default function ChatPanel({
         if (finalText) {
           const trimmed = finalText.trim();
           if (!(trimmed.length <= 3 && /^[a-z]+$/i.test(trimmed))) {
-            setInput((prev) => prev + finalText + "。");
+            setInput((prev) => prev + smartPunct(trimmed));
             setVoiceColoredText([]);
           }
         }
