@@ -161,7 +161,7 @@ export default function ChatPanel({
       if (finalText) {
         // Skip noise: short lowercase-only ASCII strings (e.g. "nn" from background noise)
         const trimmed = finalText.trim();
-        if (!(trimmed.length <= 3 && /^[a-z]+$/.test(trimmed))) {
+        if (!(trimmed.length <= 3 && /^[a-z]+$/i.test(trimmed))) {
           setInput((prev) => prev + finalText);
           setVoiceColoredText([]);
         }
@@ -195,7 +195,7 @@ export default function ChatPanel({
           } catch {
             stopStt();
           }
-        }, 400);
+        }, 200);
       } else {
         stopStt();
       }
@@ -206,7 +206,7 @@ export default function ChatPanel({
     setIsListening(true);
     setInterimText("正在准备语音识别...");
 
-    // On mobile, delay STT start to let browser release WebRTC mic hardware
+    // On mobile, brief delay so browser can release WebRTC mic hardware
     setTimeout(() => {
       if (!listeningRef.current) return;
       try {
@@ -215,7 +215,7 @@ export default function ChatPanel({
       } catch {
         stopStt();
       }
-    }, 500);
+    }, 200);
   }, [isMomo, onVoiceInputChange, stopStt]);
 
   const handleSend = () => {

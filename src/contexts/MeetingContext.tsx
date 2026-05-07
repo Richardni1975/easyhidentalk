@@ -62,8 +62,10 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
 
   const addChatMessage = useCallback((msg: ChatMessage) => {
     setChatMessages((prev) => {
-      // Dedup by senderId + text + timestamp to prevent duplicates on reconnect
-      if (prev.some((m) => m.senderId === msg.senderId && m.text === msg.text && m.timestamp === msg.timestamp)) {
+      // Dedup: same sender + same text within 10s (handles client vs server timestamp mismatch)
+      if (prev.some(
+        (m) => m.senderId === msg.senderId && m.text === msg.text && Math.abs(m.timestamp - msg.timestamp) < 10000
+      )) {
         return prev;
       }
       return [...prev, msg];
