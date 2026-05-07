@@ -289,7 +289,12 @@ function MeetingRoomInner() {
   const handleToggleMute = useCallback(() => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    toggleAudio(!newMuted);
+    if (isSttActiveRef.current && !newMuted) {
+      // User wants to unmute during STT — STT has the mic, so defer
+      pendingUnmuteRef.current = true;
+    } else {
+      toggleAudio(!newMuted);
+    }
     emit("user-mute", { muted: newMuted });
   }, [isMuted, toggleAudio, emit, setIsMuted]);
 
@@ -355,29 +360,30 @@ function MeetingRoomInner() {
     if (el) el.scrollLeft = 0;
   }, []);
 
-  // Save pre-STT mute state so we can restore it properly
-  const preSttMuteRef = useRef(false);
+  // Track STT state separately from mute — they share the mic but are independent controls
+  const isSttActiveRef = useRef(false);
+  const pendingUnmuteRef = useRef(false);
   const handleVoiceInputChange = useCallback(
     (active: boolean) => {
+      isSttActiveRef.current = active;
       if (active) {
-        preSttMuteRef.current = isMuted;
-        // Release the WebRTC audio track so SpeechRecognition can access the mic.
-        // The ChatPanel will retry if STT doesn't start immediately.
+        // Release the WebRTC audio track so SpeechRecognition can access the mic
         stopAudioTrackForStt();
-        setIsMuted(true);
-        emit("user-mute", { muted: true });
+        // Don't touch isMuted — the mute button works independently of STT
       } else {
-        const restoreMuted = preSttMuteRef.current;
-        // Recreate the audio track
+        // If the user tapped unmute during STT, honour it after audio is restored
+        const needsUnmute = pendingUnmuteRef.current;
+        pendingUnmuteRef.current = false;
+        // Recreate the audio track (and video too on mobile)
         restartAudioTrackForStt().then(() => {
-          if (!restoreMuted) {
+          if (needsUnmute) {
             setIsMuted(false);
             emit("user-mute", { muted: false });
           }
         });
       }
     },
-    [isMuted, stopAudioTrackForStt, restartAudioTrackForStt, setIsMuted, emit]
+    [stopAudioTrackForStt, restartAudioTrackForStt, setIsMuted, emit]
   );
 
   // Host determination
