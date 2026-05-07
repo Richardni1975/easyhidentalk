@@ -148,7 +148,7 @@ export default function ChatPanel({
     setInterimText("正在释放麦克风...");
 
     // Delays between retries (ms) when mic is busy
-    const RETRY_DELAYS = [500, 800, 1200, 2000, 3000, 5000];
+    const RETRY_DELAYS = [300, 500, 800, 1200, 2000, 3000];
     // Tracks probe success → startRecog failure cycles for mobile diagnostics
     let probeSuccessCount = 0;
 
@@ -225,8 +225,11 @@ export default function ChatPanel({
       recog.onend = () => {
         if (!listeningRef.current) return;
         if (errored) return; // error handler already scheduled retry
-        // Normal end — fresh instance for continuous listening
-        setTimeout(startRecog, 100);
+        // Normal end — fresh instance for continuous listening.
+        // Reset retry counters so each restart gets a fresh retry budget.
+        sttRetryRef.current = 0;
+        probeSuccessCount = 0;
+        setTimeout(startRecog, 50);
       };
 
       try {
@@ -271,9 +274,10 @@ export default function ChatPanel({
         });
     };
 
-    // Try immediately first — works on many devices without a probe delay
-    // If it fails, probe() will be called from the error handler
-    startRecog();
+    // Probe mic availability first, then start SpeechRecognition
+    // immediately in the probe success handler. This avoids a guaranteed
+    // failure cycle on mobile where the mic release is still in progress.
+    probe();
   }, [isMomo, onVoiceInputChange, stopStt]);
 
   const handleSend = () => {
