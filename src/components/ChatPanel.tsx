@@ -159,9 +159,21 @@ export default function ChatPanel({
     // Tracks probe success → startRecog failure cycles for mobile diagnostics
     let probeSuccessCount = 0;
 
-    // Shared recognition event handlers
+    // Limits auto-restart loops when mobile ignores continuous: true
+    let consecutiveRestarts = 0;
+    const MAX_RESTARTS = 5;
+
+    // Shared recognition event handlers + configuration
     const setupRecog = (recog: any) => {
+      recog.lang = "zh-CN";
+      recog.interimResults = true;
+      recog.continuous = true;
+
       let errored = false;
+
+      recog.onstart = () => {
+        console.log("SpeechRecognition started");
+      };
 
       recog.onresult = (event: any) => {
         setInterimText("");
@@ -224,9 +236,17 @@ export default function ChatPanel({
       recog.onend = () => {
         if (!listeningRef.current) return;
         if (errored) return;
-        sttRetryRef.current = 0;
-        probeSuccessCount = 0;
-        setTimeout(probe, 50);
+        // Mobile browsers often ignore continuous: true and fire onend
+        // prematurely after a pause. Auto-restart to keep listening,
+        // but stop after MAX_RESTARTS to avoid infinite loops.
+        if (consecutiveRestarts < MAX_RESTARTS) {
+          consecutiveRestarts++;
+          sttRetryRef.current = 0;
+          probeSuccessCount = 0;
+          setTimeout(probe, 50);
+        } else {
+          consecutiveRestarts = 0;
+        }
       };
 
       return recog;
@@ -241,7 +261,7 @@ export default function ChatPanel({
         recognitionRef.current = recog;
         setInterimText("");
       } catch {
-        errored = true;
+        // .start() threw synchronously — mic likely still busy, retry via probe
         if (sttRetryRef.current < RETRY_DELAYS.length) {
           setTimeout(() => probe(), RETRY_DELAYS[sttRetryRef.current++]);
         } else {
