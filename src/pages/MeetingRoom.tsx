@@ -40,6 +40,7 @@ function MeetingRoomInner() {
   const [connected, setConnected] = useState(false);
   const [speakingPeerId] = useState<string | null>(null);
   const [screenSharingPeerId, setScreenSharingPeerId] = useState<string | null>(null);
+  const [includeSystemAudio, setIncludeSystemAudio] = useState(false);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [viewingPoll, setViewingPoll] = useState<Poll | null>(null);
   const [showPollBrowser, setShowPollBrowser] = useState(false);
@@ -366,7 +367,7 @@ function MeetingRoomInner() {
       });
     } else {
       try {
-        await startScreenShare();
+        await startScreenShare(includeSystemAudio);
         setScreenSharingPeerId(peerId);
         emit("start-screen-share");
         // Renegotiate with existing peers so they receive the screen track
@@ -381,7 +382,7 @@ function MeetingRoomInner() {
         // User cancelled
       }
     }
-  }, [screenSharingPeerId, startScreenShare, stopScreenShare, createOffer, emit, peerId, participants]);
+  }, [screenSharingPeerId, startScreenShare, stopScreenShare, createOffer, emit, peerId, participants, includeSystemAudio]);
 
   const handleStopScreenShare = useCallback(() => {
     stopScreenShare();
@@ -630,6 +631,8 @@ function MeetingRoomInner() {
             onHangUp={handleHangUp}
             vertical={true}
             canScreenShare={canScreenShare}
+            includeSystemAudio={includeSystemAudio}
+            onToggleSystemAudio={() => setIncludeSystemAudio((v) => !v)}
           />
         </div>
 
@@ -707,6 +710,8 @@ function MeetingRoomInner() {
               onHangUp={handleHangUp}
               vertical={false}
               canScreenShare={canScreenShare}
+              includeSystemAudio={includeSystemAudio}
+              onToggleSystemAudio={() => setIncludeSystemAudio((v) => !v)}
             />
           </div>
         </div>

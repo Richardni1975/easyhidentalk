@@ -12,6 +12,10 @@ interface ControlBarProps {
   vertical?: boolean;
   /** Only users in the 4 video slots can share screen */
   canScreenShare?: boolean;
+  /** Include system audio in screen share */
+  includeSystemAudio?: boolean;
+  /** Toggle system audio capture */
+  onToggleSystemAudio?: () => void;
 }
 
 type ButtonStyle = "default" | "danger" | "active" | "warning";
@@ -78,6 +82,12 @@ const iconScreen = (
   </svg>
 );
 
+const iconSpeaker = (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+  </svg>
+);
+
 const iconHangUp = (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
@@ -96,6 +106,8 @@ export default function ControlBar({
   onHangUp,
   vertical,
   canScreenShare = true,
+  includeSystemAudio,
+  onToggleSystemAudio,
 }: ControlBarProps) {
   const wrapper = vertical
     ? "flex flex-col items-center gap-5 py-4 px-1"
@@ -131,6 +143,17 @@ export default function ControlBar({
           title={isScreenSharing ? "停止共享" : "共享屏幕"}
         >
           {iconScreen}
+        </button>
+      )}
+
+      {/* System audio toggle for screen share */}
+      {canScreenShare && !isScreenSharing && (
+        <button
+          onClick={onToggleSystemAudio}
+          className={btnClass(includeSystemAudio ? "active" : "default")}
+          title={includeSystemAudio ? "包含系统音频" : "不包含系统音频"}
+        >
+          {iconSpeaker}
         </button>
       )}
 

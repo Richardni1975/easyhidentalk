@@ -244,7 +244,8 @@ export function useWebRTC() {
     });
   }, []);
 
-  const startScreenShare = useCallback(async () => {
+  const startScreenShare = useCallback(async (includeAudio?: boolean) => {
+    const wantsAudio = includeAudio !== false;
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -253,14 +254,15 @@ export function useWebRTC() {
           height: { ideal: 1080 },
           frameRate: { ideal: 30 },
         },
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-        systemAudio: "include",
-        // Prevents self-echo when capturing system audio on supported browsers
-        suppressLocalAudioPlayback: false,
+        ...(wantsAudio && {
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+          systemAudio: "include",
+          suppressLocalAudioPlayback: false,
+        }),
       });
 
       localScreenStreamRef.current = screenStream;
