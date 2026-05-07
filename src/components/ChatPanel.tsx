@@ -225,11 +225,13 @@ export default function ChatPanel({
       recog.onend = () => {
         if (!listeningRef.current) return;
         if (errored) return; // error handler already scheduled retry
-        // Normal end — fresh instance for continuous listening.
-        // Reset retry counters so each restart gets a fresh retry budget.
+        // Normal end — e.g. browser timeout with continuous:true.
+        // Use probe() instead of direct startRecog() because the mic might
+        // still be releasing from the previous session. probe() waits for
+        // the mic to become available before creating a new instance.
         sttRetryRef.current = 0;
         probeSuccessCount = 0;
-        setTimeout(startRecog, 50);
+        setTimeout(probe, 50);
       };
 
       try {
