@@ -142,91 +142,115 @@ export default function ChatPanel({
     // Notify parent to release the WebRTC mic so STT can access it
     onVoiceInputChange?.(true);
 
-    const recognition = new SpeechRecognitionAPI();
-    recognition.lang = "zh-CN";
-    recognition.interimResults = true;
-    recognition.continuous = false;
-
-    recognition.onresult = (event: any) => {
-      let finalText = "";
-      let interim = "";
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalText += transcript;
-        } else {
-          interim += transcript;
-        }
-      }
-
-      if (finalText) {
-        // Skip noise: short lowercase-only ASCII strings (e.g. "nn" from background noise)
-        const trimmed = finalText.trim();
-        if (!(trimmed.length <= 3 && /^[a-z]+$/i.test(trimmed))) {
-          setInput((prev) => prev + finalText);
-          setVoiceColoredText([]);
-        }
-      }
-
-      setInterimText(interim);
-
-      if (isMomo) {
-        const results: { text: string; color: string }[] = [];
-        for (let i = 0; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (transcript) {
-            results.push({ text: transcript, color: randomMomoColor() });
-          }
-        }
-        setVoiceColoredText(results);
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      // Only retry for mic-contention errors, not "no-speech" or "aborted"
-      if ((event.error === "audio-capture" || event.error === "not-allowed") && sttRetryRef.current < 3) {
-        const delays = [400, 700, 1200];
-        const delay = delays[sttRetryRef.current];
-        sttRetryRef.current++;
-        setInterimText(`正在获取麦克风${".".repeat(sttRetryRef.current)}`);
-        setTimeout(() => {
-          if (!listeningRef.current) return;
-          try { recognition.start(); } catch { /* onerror will handle */ }
-        }, delay);
-      } else {
-        stopStt();
-      }
-    };
-
-    recognition.onend = () => {
-      if (listeningRef.current) {
-        // Brief pause before restart so the browser can settle
-        setTimeout(() => {
-          if (!listeningRef.current) return;
-          try { recognition.start(); } catch { stopStt(); }
-        }, 150);
-      } else {
-        stopStt();
-      }
-    };
-
-    recognitionRef.current = recognition;
     listeningRef.current = true;
     sttRetryRef.current = 0;
     setIsListening(true);
+    setInterimText("正在释放麦克风...");
 
-    // Start immediately — no artificial delay before first attempt.
-    // If the mic isn't released yet, onerror will retry with increasing delays.
-    try {
-      recognition.start();
-    } catch {
-      // Sync failure (rare) — retry once after a pause
-      setTimeout(() => {
+    // Each retry delay in ms. On mobile the mic can take several seconds to release,
+    // so we keep trying with fresh instances for up to ~10s total.
+    const RETRY_DELAYS = [600, 600, 1000, 1500, 2500, 4000];
+
+    const attempt = () => {
+      if (!listeningRef.current) return;
+
+      const recog = new SpeechRecognitionAPI();
+      recog.lang = "zh-CN";
+      recog.interimResults = true;
+      recog.continuous = false;
+
+      let hadRetryableError = false;
+
+      recog.onresult = (event: any) => {
+        // Recognition is working — clear any status text
+        setInterimText("");
+
+        let finalText = "";
+        let interim = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalText += transcript;
+          } else {
+            interim += transcript;
+          }
+        }
+
+        if (finalText) {
+          // Skip noise: short lowercase-only ASCII strings (e.g. "nn" from background noise)
+          const trimmed = finalText.trim();
+          if (!(trimmed.length <= 3 && /^[a-z]+$/i.test(trimmed))) {
+            setInput((prev) => prev + finalText);
+            setVoiceColoredText([]);
+          }
+        }
+
+        setInterimText(interim);
+
+        if (isMomo) {
+          const results: { text: string; color: string }[] = [];
+          for (let i = 0; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (transcript) {
+              results.push({ text: transcript, color: randomMomoColor() });
+            }
+          }
+          setVoiceColoredText(results);
+        }
+      };
+
+      recog.onerror = (event: any) => {
+        if (event.error === "audio-capture" || event.error === "not-allowed") {
+          hadRetryableError = true;
+          if (sttRetryRef.current < RETRY_DELAYS.length) {
+            const delay = RETRY_DELAYS[sttRetryRef.current];
+            sttRetryRef.current++;
+            const dots = Math.min(sttRetryRef.current, 5);
+            setInterimText(`正在获取麦克风${".".repeat(dots)}`);
+            setTimeout(attempt, delay);
+          } else {
+            // All retries exhausted
+            setInterimText("无法获取麦克风，请重试");
+            setTimeout(() => stopStt(), 1500);
+          }
+        } else if (event.error !== "no-speech" && event.error !== "aborted") {
+          // Non-recoverable error — stop
+          stopStt();
+        }
+        // no-speech / aborted: do nothing, onend will handle
+      };
+
+      recog.onend = () => {
         if (!listeningRef.current) return;
-        try { recognition.start(); } catch { stopStt(); }
-      }, 400);
-    }
+        if (hadRetryableError) return; // Error retry path already scheduled a new attempt
+        // Normal end — restart this instance for continuous listening
+        setTimeout(() => {
+          if (!listeningRef.current) return;
+          try { recog.start(); } catch { stopStt(); }
+        }, 100);
+      };
+
+      try {
+        recog.start();
+        recognitionRef.current = recog;
+        // Clear "releasing mic" status now that we've started
+        setInterimText("");
+      } catch {
+        // Sync start failure (rare) — schedule a retry
+        if (sttRetryRef.current < RETRY_DELAYS.length) {
+          const delay = RETRY_DELAYS[sttRetryRef.current];
+          sttRetryRef.current++;
+          setTimeout(attempt, delay);
+        } else {
+          stopStt();
+        }
+      }
+    };
+
+    // First attempt after a short delay to let the mic hardware release
+    sttRetryRef.current = 1;
+    setTimeout(attempt, RETRY_DELAYS[0]);
   }, [isMomo, onVoiceInputChange, stopStt]);
 
   const handleSend = () => {
