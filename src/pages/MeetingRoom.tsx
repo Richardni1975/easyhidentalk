@@ -354,11 +354,21 @@ function MeetingRoomInner() {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Ensure mobile starts at video panel (leftmost), not chat
+  // Ensure mobile starts at chat panel (leftmost)
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (el) el.scrollLeft = 0;
   }, []);
+
+  // Apply default mute/camera-off once peer connections are established
+  const initMuteRef = useRef(false);
+  useEffect(() => {
+    if (connected && localStream && !initMuteRef.current) {
+      initMuteRef.current = true;
+      toggleAudio(false);
+      toggleVideo(false);
+    }
+  }, [connected, localStream, toggleAudio, toggleVideo]);
 
   // Track STT state separately from mute — they share the mic but are independent controls
   const isSttActiveRef = useRef(false);
@@ -514,7 +524,45 @@ function MeetingRoomInner() {
         ref={scrollContainerRef}
         className="flex-1 flex overflow-x-auto overflow-y-hidden md:overflow-hidden snap-x snap-mandatory min-h-0 overscroll-x-contain overscroll-y-none"
       >
-        {/* LEFT: Video panel */}
+        {/* LEFT (mobile first): Chat panel */}
+        <div className="w-full md:flex-1 flex-shrink-0 snap-start flex flex-col min-h-0">
+          <ChatPanel
+            messages={chatMessages}
+            onSend={handleSendChat}
+            currentPeerId={peerId}
+            isMomo={isMomo}
+            polls={polls}
+            onCreatePoll={handleCreatePoll}
+            onVotePoll={handleVotePoll}
+            onClosePoll={handleClosePoll}
+            onViewResults={handleViewResults}
+            onVoiceInputChange={handleVoiceInputChange}
+            onToggleMomo={handleToggleMomo}
+          />
+
+          {/* Mobile swipe hint */}
+          <div className="md:hidden text-center py-1 text-dark-500 text-xs flex-shrink-0">
+            &larr; 向左滑动，进入视频聊天
+          </div>
+        </div>
+
+        {/* DESKTOP: Vertical control buttons */}
+        <div className="hidden md:flex flex-col items-center justify-center flex-shrink-0 w-16 bg-dark-900/50 border-l border-r border-dark-800/50">
+          <ControlBar
+            isMuted={isMuted}
+            isCameraOff={isCameraOff}
+            handRaised={handRaised}
+            isScreenSharing={!!screenSharingPeerId}
+            onToggleMute={handleToggleMute}
+            onToggleCamera={handleToggleCamera}
+            onToggleHandRaise={handleToggleHandRaise}
+            onToggleScreenShare={handleToggleScreenShare}
+            onHangUp={handleHangUp}
+            vertical={true}
+          />
+        </div>
+
+        {/* RIGHT: Video panel */}
         <div className="w-full md:flex-1 flex-shrink-0 snap-start flex flex-col min-h-0">
           {/* Video content */}
           <div className="flex-1 flex flex-col min-h-0">
@@ -569,7 +617,7 @@ function MeetingRoomInner() {
 
           {/* Mobile swipe hint */}
           <div className="md:hidden text-center py-1 text-dark-500 text-xs flex-shrink-0">
-            &larr; 向左滑动，进入聊天区
+            &rarr; 向右滑动，进入文字聊天
           </div>
 
           {/* Mobile: bottom control bar */}
@@ -587,39 +635,6 @@ function MeetingRoomInner() {
               vertical={false}
             />
           </div>
-        </div>
-
-        {/* DESKTOP: Vertical control buttons */}
-        <div className="hidden md:flex flex-col items-center justify-center flex-shrink-0 w-16 bg-dark-900/50 border-l border-r border-dark-800/50">
-          <ControlBar
-            isMuted={isMuted}
-            isCameraOff={isCameraOff}
-            handRaised={handRaised}
-            isScreenSharing={!!screenSharingPeerId}
-            onToggleMute={handleToggleMute}
-            onToggleCamera={handleToggleCamera}
-            onToggleHandRaise={handleToggleHandRaise}
-            onToggleScreenShare={handleToggleScreenShare}
-            onHangUp={handleHangUp}
-            vertical={true}
-          />
-        </div>
-
-        {/* RIGHT: Chat panel */}
-        <div className="w-full md:flex-1 flex-shrink-0 snap-start flex flex-col min-h-0">
-          <ChatPanel
-            messages={chatMessages}
-            onSend={handleSendChat}
-            currentPeerId={peerId}
-            isMomo={isMomo}
-            polls={polls}
-            onCreatePoll={handleCreatePoll}
-            onVotePoll={handleVotePoll}
-            onClosePoll={handleClosePoll}
-            onViewResults={handleViewResults}
-            onVoiceInputChange={handleVoiceInputChange}
-            onToggleMomo={handleToggleMomo}
-          />
         </div>
       </div>
 

@@ -35,8 +35,8 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isMomo, setIsMomo] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOff, setIsCameraOff] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [isCameraOff, setIsCameraOff] = useState(true);
   const [handRaised, setHandRaised] = useState(false);
   const peerIdRef = useRef(`peer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
 
