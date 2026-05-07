@@ -252,8 +252,16 @@ export function useWebRTC() {
 
   const toggleAudio = useCallback(
     (enabled: boolean) => {
-      localStreamRef.current?.getAudioTracks().forEach((track) => {
-        track.enabled = enabled;
+      const track = localStreamRef.current?.getAudioTracks()[0];
+      if (!track) return;
+      // Keep track.enabled true and use replaceTrack for reliable on/off control.
+      // This avoids releasing the mic hardware on mobile (enabled=false can lose it).
+      track.enabled = true;
+      peerConnections.current.forEach(({ pc }) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+        if (sender) {
+          sender.replaceTrack(enabled ? track : null).catch(() => {});
+        }
       });
     },
     []
@@ -307,8 +315,15 @@ export function useWebRTC() {
 
   const toggleVideo = useCallback(
     (enabled: boolean) => {
-      localStreamRef.current?.getVideoTracks().forEach((track) => {
-        track.enabled = enabled;
+      const track = localStreamRef.current?.getVideoTracks()[0];
+      if (!track) return;
+      // Same approach as toggleAudio: keep hardware active, control sending.
+      track.enabled = true;
+      peerConnections.current.forEach(({ pc }) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) {
+          sender.replaceTrack(enabled ? track : null).catch(() => {});
+        }
       });
     },
     []
