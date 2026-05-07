@@ -61,7 +61,13 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addChatMessage = useCallback((msg: ChatMessage) => {
-    setChatMessages((prev) => [...prev, msg]);
+    setChatMessages((prev) => {
+      // Dedup by senderId + text + timestamp to prevent duplicates on reconnect
+      if (prev.some((m) => m.senderId === msg.senderId && m.text === msg.text && m.timestamp === msg.timestamp)) {
+        return prev;
+      }
+      return [...prev, msg];
+    });
   }, []);
 
   const getDisplayName = useCallback(

@@ -159,8 +159,12 @@ export default function ChatPanel({
       }
 
       if (finalText) {
-        setInput((prev) => prev + finalText);
-        setVoiceColoredText([]);
+        // Skip noise: short lowercase-only ASCII strings (e.g. "nn" from background noise)
+        const trimmed = finalText.trim();
+        if (!(trimmed.length <= 3 && /^[a-z]+$/.test(trimmed))) {
+          setInput((prev) => prev + finalText);
+          setVoiceColoredText([]);
+        }
       }
 
       setInterimText(interim);
