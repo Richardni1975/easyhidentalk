@@ -339,7 +339,10 @@ export function useWebRTC() {
       hadVideoForSttRef.current = !!videoTrack;
       savedVideoForSttRef.current = videoTrack || null;
 
-      stream.getTracks().forEach((t) => t.stop());
+      stream.getTracks().forEach((t) => {
+        t.enabled = false;
+        t.stop();
+      });
 
       // Null all peer senders so remote peers know we stopped sending
       peerConnections.current.forEach(({ pc }) => {

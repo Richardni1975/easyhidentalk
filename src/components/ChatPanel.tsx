@@ -217,15 +217,15 @@ export default function ChatPanel({
         if (event.error === "audio-capture" || event.error === "not-allowed") {
           errored = true;
           if (probeSuccessCount >= 2) {
-            setInterimText("设备不支持语音识别，请使用桌面版Chrome");
+            setInterimText(`STT错误: ${event.error}，请使用桌面版Chrome`);
             setTimeout(() => stopStt(), 2000);
           } else if (sttRetryRef.current < RETRY_DELAYS.length) {
             const delay = RETRY_DELAYS[sttRetryRef.current];
             sttRetryRef.current++;
-            setInterimText(`正在获取麦克风${".".repeat(Math.min(sttRetryRef.current, 5))}`);
+            setInterimText(`麦克风 ${".".repeat(Math.min(sttRetryRef.current, 5))} (${event.error})`);
             setTimeout(() => probe(), delay);
           } else {
-            setInterimText("无法获取麦克风，请重试");
+            setInterimText(`STT错误: ${event.error}，请重试`);
             setTimeout(() => stopStt(), 1500);
           }
         } else if (event.error !== "no-speech" && event.error !== "aborted") {
@@ -280,7 +280,9 @@ export default function ChatPanel({
           probeStream.getTracks().forEach((t) => t.stop());
           if (!listeningRef.current) return;
           probeSuccessCount++;
-          startRecog();
+          // 500ms breathing gap for mobile OS audio routing switch
+          setInterimText("准备麦克风...");
+          setTimeout(() => startRecog(), 500);
         })
         .catch(() => {
           if (sttRetryRef.current < RETRY_DELAYS.length) {
