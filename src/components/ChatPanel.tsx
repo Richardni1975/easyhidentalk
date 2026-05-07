@@ -159,6 +159,8 @@ export default function ChatPanel({
     // Limits auto-restart loops when mobile ignores continuous: true
     let consecutiveRestarts = 0;
     const MAX_RESTARTS = 5;
+    // Tracks whether we've released the WebRTC mic during STT startup
+    let webrtcReleased = false;
 
     // Shared recognition event handlers + configuration
     const setupRecog = (recog: any) => {
@@ -223,7 +225,18 @@ export default function ChatPanel({
           return;
         }
 
-        // Retriable errors: mic busy or permission issue
+        // If WebRTC still holds the mic, release it first then retry.
+        // iOS often fires onerror async (not in the catch block), so we
+        // must release here to give SpeechRecognition a chance.
+        if (!webrtcReleased) {
+          webrtcReleased = true;
+          onVoiceInputChange?.(true);
+          setInterimText(`聆听中... (${event.error})`);
+          setTimeout(() => probe(), 100);
+          return;
+        }
+
+        // WebRTC already released — normal retry cycle
         if (sttRetryRef.current < RETRY_DELAYS.length) {
           const delay = RETRY_DELAYS[sttRetryRef.current];
           sttRetryRef.current++;
@@ -308,7 +321,8 @@ export default function ChatPanel({
       recognitionRef.current = directRecog;
       setInterimText("");
     } catch {
-      // Direct start failed — release WebRTC mic and retry via probe
+      // Direct start threw synchronously — release WebRTC mic and retry via probe
+      webrtcReleased = true;
       onVoiceInputChange?.(true);
       probe();
     }
