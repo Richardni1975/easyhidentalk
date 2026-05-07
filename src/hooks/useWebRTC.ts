@@ -49,6 +49,10 @@ export function useWebRTC() {
   const localScreenStreamRef = useRef<MediaStream | null>(null);
   const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
   const stopScreenShareRef = useRef<(() => void) | null>(null);
+  // Mobile: must release ALL tracks to free mic for STT (video keeps mic alive on some devices)
+  const isMobileRef = useRef(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+  const savedVideoForSttRef = useRef<MediaStreamTrack | null>(null);
+  const hadVideoForSttRef = useRef(false);
 
   const startLocalStream = useCallback(async () => {
     const constraints: MediaStreamConstraints = {
@@ -306,49 +310,99 @@ export function useWebRTC() {
     []
   );
 
-  /** Fully stop the audio track so the mic is released (needed for STT on mobile) */
+  /** Release the WebRTC mic so SpeechRecognition can access it */
   const stopAudioTrackForStt = useCallback(() => {
     const stream = localStreamRef.current;
     if (!stream) return;
-    stream.getAudioTracks().forEach((track) => {
-      track.stop();
-      stream.removeTrack(track);
-    });
-    // Tell all peers we're not sending audio anymore
-    peerConnections.current.forEach(({ pc }) => {
-      const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
-      if (sender) {
-        sender.replaceTrack(null).catch(() => {});
-      }
-    });
-    // Update React state so the UI reflects the stream (video still intact)
-    setLocalStream(new MediaStream(stream.getTracks()));
-  }, []);
 
-  /** Recreate the audio track after STT finishes */
-  const restartAudioTrackForStt = useCallback(async () => {
-    try {
-      const newStream = await getAudioStream();
-      const newTrack = newStream.getAudioTracks()[0];
-      let stream = localStreamRef.current;
-      if (stream) {
-        stream.addTrack(newTrack);
-      } else {
-        // Previous stream was nulled out — create a fresh one
-        stream = new MediaStream([newTrack]);
-        localStreamRef.current = stream;
-      }
+    if (isMobileRef.current) {
+      // Mobile: stopping only audio is NOT enough — the video track from the
+      // same getUserMedia keeps the mic session alive (observed on Huawei).
+      // Save camera state and release ALL tracks.
+      const videoTrack = stream.getVideoTracks()[0];
+      hadVideoForSttRef.current = !!videoTrack;
+      savedVideoForSttRef.current = videoTrack || null;
+
+      stream.getTracks().forEach((t) => t.stop());
+
+      // Null all peer senders so remote peers know we stopped sending
+      peerConnections.current.forEach(({ pc }) => {
+        pc.getSenders().forEach((sender) => {
+          sender.replaceTrack(null).catch(() => {});
+        });
+      });
+
+      localStreamRef.current = null;
+      setLocalStream(null);
+    } else {
+      // Desktop: stopping just the audio tracks is sufficient
+      stream.getAudioTracks().forEach((track) => {
+        track.stop();
+        stream.removeTrack(track);
+      });
       peerConnections.current.forEach(({ pc }) => {
         const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
         if (sender) {
-          sender.replaceTrack(newTrack).catch(() => {});
+          sender.replaceTrack(null).catch(() => {});
         }
       });
-      // Update the React state so the UI picks up the new stream
       setLocalStream(new MediaStream(stream.getTracks()));
-      return newTrack;
+    }
+  }, []);
+
+  /** Recreate media tracks after STT finishes */
+  const restartAudioTrackForStt = useCallback(async () => {
+    try {
+      if (isMobileRef.current) {
+        // Mobile: re-acquire everything that was released for STT
+        const constraints: MediaStreamConstraints = { audio: true };
+        if (hadVideoForSttRef.current) {
+          constraints.video = {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: "user",
+          };
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        localStreamRef.current = stream;
+
+        // Re-add tracks to peer connections
+        peerConnections.current.forEach(({ pc }) => {
+          stream.getTracks().forEach((track) => {
+            const sender = pc.getSenders().find((s) => s.track?.kind === track.kind);
+            if (sender) {
+              sender.replaceTrack(track).catch(() => {});
+            } else {
+              pc.addTrack(track, stream);
+            }
+          });
+        });
+
+        setLocalStream(stream);
+        savedVideoForSttRef.current = null;
+        hadVideoForSttRef.current = false;
+      } else {
+        // Desktop: add audio back to the existing stream (video never stopped)
+        const newStream = await getAudioStream();
+        const newTrack = newStream.getAudioTracks()[0];
+        let stream = localStreamRef.current;
+        if (stream) {
+          stream.addTrack(newTrack);
+        } else {
+          stream = new MediaStream([newTrack]);
+          localStreamRef.current = stream;
+        }
+        peerConnections.current.forEach(({ pc }) => {
+          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+          if (sender) {
+            sender.replaceTrack(newTrack).catch(() => {});
+          }
+        });
+        setLocalStream(new MediaStream(stream.getTracks()));
+      }
     } catch (err) {
-      console.warn("Failed to restart audio after STT:", err);
+      console.warn("Failed to restart media after STT:", err);
     }
   }, []);
 
