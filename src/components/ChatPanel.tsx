@@ -195,7 +195,7 @@ export default function ChatPanel({
       const recog = new SpeechRecognitionAPI();
       recog.lang = "zh-CN";
       recog.interimResults = true;
-      recog.continuous = false;
+      recog.continuous = true;
 
       let errored = false;
 
