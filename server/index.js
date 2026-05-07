@@ -115,10 +115,13 @@ io.on("connection", (socket) => {
       .filter(([id]) => id !== peerId)
       .map(([id, info]) => ({ peerId: id, ...info }));
 
-    socket.emit("existing-participants", {
-      participants: existingParticipants,
-      screenSharingPeerId: roomScreenShares.get(roomId) || null,
-    });
+    socket.emit("existing-participants", existingParticipants);
+
+    // If someone is sharing their screen, tell the new joiner
+    const currentSharer = roomScreenShares.get(roomId);
+    if (currentSharer) {
+      socket.emit("current-screen-share", { peerId: currentSharer });
+    }
 
     // Send existing polls to the new joiner (anonymize momo-mode polls)
     const existingPolls = roomPolls.get(roomId);
@@ -131,12 +134,6 @@ io.on("connection", (socket) => {
     const existingMsgs = roomMessages.get(roomId);
     if (existingMsgs && existingMsgs.length > 0) {
       socket.emit("existing-messages", existingMsgs);
-    }
-
-    // If someone is sharing their screen, tell the new joiner
-    const currentSharer = roomScreenShares.get(roomId);
-    if (currentSharer) {
-      socket.emit("current-screen-share", { peerId: currentSharer });
     }
 
     // Notify others only if this is a fresh join, not a reconnect
@@ -394,15 +391,8 @@ io.on("connection", (socket) => {
         const wasHost = room.get(peerId)?.isHost;
         room.delete(peerId);
 
-        // If the disconnected peer was sharing their screen, clean up
-        if (roomScreenShares.get(currentRoom) === peerId) {
-          roomScreenShares.delete(currentRoom);
-          io.to(currentRoom).emit("screen-share-stopped", { peerId });
-        }
-
         if (room.size === 0) {
           rooms.delete(currentRoom);
-          roomScreenShares.delete(currentRoom);
         } else {
           // If the host left, promote the earliest-remaining participant
           if (wasHost) {

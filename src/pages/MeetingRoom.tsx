@@ -113,11 +113,7 @@ function MeetingRoomInner() {
       isMomo: state?.isMomo || false,
     });
 
-    const unsubExisting = on("existing-participants", (data: any) => {
-      // Support both new format { participants, screenSharingPeerId } and old array format
-      const existing = Array.isArray(data) ? data : data.participants;
-      const initialScreenSharer = !Array.isArray(data) ? data.screenSharingPeerId : null;
-
+    const unsubExisting = on("existing-participants", (existing: any[]) => {
       const participantsList: Participant[] = existing.map((p: any) => ({
         peerId: p.peerId,
         userName: p.userName,
@@ -135,9 +131,6 @@ function MeetingRoomInner() {
         amHostRef.current = true;
       }
       setParticipants(participantsList);
-      if (initialScreenSharer) {
-        setScreenSharingPeerId(initialScreenSharer);
-      }
 
       participantsList.forEach((p) => {
         createPeerConnection(
