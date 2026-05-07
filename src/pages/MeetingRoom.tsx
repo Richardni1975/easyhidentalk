@@ -509,7 +509,7 @@ function MeetingRoomInner() {
         className="flex-1 flex overflow-x-auto overflow-y-hidden md:overflow-hidden snap-x snap-mandatory min-h-0 overscroll-x-contain overscroll-y-none"
       >
         {/* LEFT: Video panel */}
-        <div className="w-full md:w-1/2 flex-shrink-0 snap-start flex flex-col min-h-0">
+        <div className="w-full md:flex-1 flex-shrink-0 snap-start flex flex-col min-h-0">
           {/* Video content */}
           <div className="flex-1 flex flex-col min-h-0">
             {activeScreenStream ? (
@@ -600,7 +600,7 @@ function MeetingRoomInner() {
         </div>
 
         {/* RIGHT: Chat panel */}
-        <div className="w-full md:w-1/2 flex-shrink-0 snap-start flex flex-col min-h-0">
+        <div className="w-full md:flex-1 flex-shrink-0 snap-start flex flex-col min-h-0">
           <ChatPanel
             messages={chatMessages}
             onSend={handleSendChat}
