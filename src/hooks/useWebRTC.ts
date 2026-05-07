@@ -7,6 +7,28 @@ interface PeerConnection {
 }
 
 export function useWebRTC() {
+  // Some mobile browsers don't support { exact: true } audio constraints
+  async function getAudioStream() {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: { exact: true },
+          noiseSuppression: { exact: true },
+          autoGainControl: { exact: true },
+        },
+      });
+    } catch {
+      // Fallback: without exact
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      } catch {
+        return await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+    }
+  }
+
   const peerConnections = useRef<Map<string, PeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -254,13 +276,7 @@ export function useWebRTC() {
     async (enabled: boolean) => {
       if (enabled) {
         try {
-          const newStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: { exact: true },
-              noiseSuppression: { exact: true },
-              autoGainControl: { exact: true },
-            },
-          });
+          const newStream = await getAudioStream();
           const track = newStream.getAudioTracks()[0];
           const s = localStreamRef.current;
           if (s) {
@@ -313,13 +329,7 @@ export function useWebRTC() {
   /** Recreate the audio track after STT finishes */
   const restartAudioTrackForStt = useCallback(async () => {
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: { exact: true },
-          noiseSuppression: { exact: true },
-          autoGainControl: { exact: true },
-        },
-      });
+      const newStream = await getAudioStream();
       const newTrack = newStream.getAudioTracks()[0];
       let stream = localStreamRef.current;
       if (stream) {
