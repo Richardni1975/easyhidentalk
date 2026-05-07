@@ -42,6 +42,7 @@ export function useWebRTC() {
   // Screen share state
   const mainStreamIdPerPeerRef = useRef<Map<string, string>>(new Map());
   const screenSenders = useRef<Map<string, RTCRtpSender>>(new Map());
+  const screenAudioSenders = useRef<Map<string, RTCRtpSender>>(new Map());
   const screenShareStreamsRef = useRef<Map<string, MediaStream>>(new Map());
   const [screenShareStreams, setScreenShareStreams] = useState<
     Map<string, MediaStream>
@@ -105,6 +106,7 @@ export function useWebRTC() {
         mainStreamIdPerPeerRef.current.delete(peerId);
         screenShareStreamsRef.current.delete(peerId);
         screenSenders.current.delete(peerId);
+        screenAudioSenders.current.delete(peerId);
       }
 
       const pc = new RTCPeerConnection({
@@ -134,10 +136,15 @@ export function useWebRTC() {
       // If screen sharing is active, also add screen tracks for this new peer
       if (localScreenStreamRef.current) {
         const screenTrack = localScreenStreamRef.current.getVideoTracks()[0];
+        const screenAudioTrack = localScreenStreamRef.current.getAudioTracks()[0];
         if (screenTrack) {
           const screenStream = new MediaStream([screenTrack]);
           const sender = pc.addTrack(screenTrack, screenStream);
           if (sender) screenSenders.current.set(peerId, sender);
+          if (screenAudioTrack) {
+            const audioSender = pc.addTrack(screenAudioTrack, screenStream);
+            if (audioSender) screenAudioSenders.current.set(peerId, audioSender);
+          }
         }
       }
 
@@ -194,6 +201,7 @@ export function useWebRTC() {
           });
           screenShareStreamsRef.current.delete(peerId);
           screenSenders.current.delete(peerId);
+          screenAudioSenders.current.delete(peerId);
           mainStreamIdPerPeerRef.current.delete(peerId);
           peerConnections.current.delete(peerId);
         }
@@ -218,6 +226,7 @@ export function useWebRTC() {
   const addScreenTrack = useCallback((screenStream: MediaStream) => {
     const screenTrack = screenStream.getVideoTracks()[0];
     if (!screenTrack) return;
+    const screenAudioTrack = screenStream.getAudioTracks()[0];
 
     peerConnections.current.forEach(({ pc }, peerId) => {
       if (screenSenders.current.has(peerId)) return;
@@ -225,6 +234,10 @@ export function useWebRTC() {
         const screenMediaStream = new MediaStream([screenTrack]);
         const sender = pc.addTrack(screenTrack, screenMediaStream);
         if (sender) screenSenders.current.set(peerId, sender);
+        if (screenAudioTrack && !screenAudioSenders.current.has(peerId)) {
+          const audioSender = pc.addTrack(screenAudioTrack, screenMediaStream);
+          if (audioSender) screenAudioSenders.current.set(peerId, audioSender);
+        }
       } catch (err) {
         console.warn(`Failed to add screen track to peer ${peerId}:`, err);
       }
@@ -239,6 +252,7 @@ export function useWebRTC() {
           height: { ideal: 1080 },
           frameRate: { ideal: 30 },
         },
+        audio: true,
       });
 
       localScreenStreamRef.current = screenStream;
@@ -267,8 +281,13 @@ export function useWebRTC() {
       if (sender && sender.track) {
         sender.track.stop();
       }
+      const audioSender = screenAudioSenders.current.get(peerId);
+      if (audioSender && audioSender.track) {
+        audioSender.track.stop();
+      }
     });
     screenSenders.current.clear();
+    screenAudioSenders.current.clear();
 
     if (localScreenStreamRef.current) {
       localScreenStreamRef.current.getTracks().forEach((t) => t.stop());
