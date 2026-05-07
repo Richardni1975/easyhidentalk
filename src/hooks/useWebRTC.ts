@@ -248,11 +248,19 @@ export function useWebRTC() {
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
+          displaySurface: "monitor",
           width: { ideal: 1920 },
           height: { ideal: 1080 },
           frameRate: { ideal: 30 },
         },
-        audio: true,
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+        systemAudio: "include",
+        // Prevents self-echo when capturing system audio on supported browsers
+        suppressLocalAudioPlayback: false,
       });
 
       localScreenStreamRef.current = screenStream;
