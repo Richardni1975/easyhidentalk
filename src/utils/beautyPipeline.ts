@@ -147,8 +147,8 @@ export class BeautyPipeline {
       this.offscreen.height = lh;
     }
 
-    // Step 1: Draw at low resolution → creates the "impressionist" color patches
-    offCtx.imageSmoothingEnabled = false;
+    // Step 1: Smooth downscale → bilinear interpolation blends pixels softly
+    offCtx.imageSmoothingEnabled = true;
     offCtx.drawImage(video, 0, 0, lw, lh);
 
     // Step 2: Scale back up with heavy smoothing → soft painted look
@@ -156,7 +156,21 @@ export class BeautyPipeline {
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(this.offscreen, 0, 0, vw, vh);
 
-    // Step 3: Optional vibrance boost (oil painting color feel)
+    // Step 3: Mild blur for natural smoothness (softens color patch boundaries)
+    if (intensity > 0.1) {
+      const blurRadius = 0.5 + intensity * 2.5; // ~0.6px → 3px
+      // Resize offscreen to full resolution for use as blur source
+      if (this.offscreen.width !== vw || this.offscreen.height !== vh) {
+        this.offscreen.width = vw;
+        this.offscreen.height = vh;
+      }
+      offCtx.drawImage(this.canvas, 0, 0); // copy current output
+      ctx.filter = `blur(${blurRadius}px)`;
+      ctx.drawImage(this.offscreen, 0, 0);
+      ctx.filter = "none";
+    }
+
+    // Step 4: Optional vibrance boost (oil painting color feel)
     if (vibrance > 0) {
       const imageData = ctx.getImageData(0, 0, vw, vh);
       const d = imageData.data;
