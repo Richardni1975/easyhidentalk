@@ -146,9 +146,6 @@ export default function ChatPanel({
       return;
     }
 
-    // Notify parent to release the WebRTC mic so STT can access it
-    onVoiceInputChange?.(true);
-
     listeningRef.current = true;
     sttRetryRef.current = 0;
     setIsListening(true);
@@ -214,22 +211,27 @@ export default function ChatPanel({
 
       recog.onerror = (event: any) => {
         console.error("SpeechRecognition error:", event.error, event.message || "");
-        if (event.error === "audio-capture" || event.error === "not-allowed") {
-          errored = true;
-          if (probeSuccessCount >= 2) {
-            setInterimText(`STT错误: ${event.error}，请使用桌面版Chrome`);
-            setTimeout(() => stopStt(), 2000);
-          } else if (sttRetryRef.current < RETRY_DELAYS.length) {
-            const delay = RETRY_DELAYS[sttRetryRef.current];
-            sttRetryRef.current++;
-            setInterimText(`聆听中... (${event.error})`);
-            setTimeout(() => probe(), delay);
-          } else {
-            setInterimText(`STT错误: ${event.error}，请重试`);
-            setTimeout(() => stopStt(), 1500);
-          }
-        } else if (event.error !== "no-speech" && event.error !== "aborted") {
-          stopStt();
+        errored = true;
+
+        // "no-speech" and "aborted" are benign during continuous listening
+        if (event.error === "no-speech" || event.error === "aborted") return;
+
+        // "service-not-allowed" means the speech engine is unavailable on this device
+        if (event.error === "service-not-allowed") {
+          setInterimText("STT: 语音服务不可用，请使用桌面版Chrome");
+          setTimeout(() => stopStt(), 2000);
+          return;
+        }
+
+        // Retriable errors: mic busy or permission issue
+        if (sttRetryRef.current < RETRY_DELAYS.length) {
+          const delay = RETRY_DELAYS[sttRetryRef.current];
+          sttRetryRef.current++;
+          setInterimText(`聆听中... (${event.error})`);
+          setTimeout(() => probe(), delay);
+        } else {
+          setInterimText(`STT错误: ${event.error}，请重试`);
+          setTimeout(() => stopStt(), 1500);
         }
       };
 
@@ -306,7 +308,8 @@ export default function ChatPanel({
       recognitionRef.current = directRecog;
       setInterimText("");
     } catch {
-      // Direct start failed — use probe-based retry
+      // Direct start failed — release WebRTC mic and retry via probe
+      onVoiceInputChange?.(true);
       probe();
     }
   }, [isMomo, onVoiceInputChange, stopStt]);
