@@ -305,6 +305,9 @@ export function useWebRTC() {
         sender.replaceTrack(null).catch(() => {});
       }
     });
+    // Fully release the MediaStream object so the browser frees the mic hardware
+    localStreamRef.current = null;
+    setLocalStream(null);
   }, []);
 
   /** Recreate the audio track after STT finishes */
@@ -318,18 +321,22 @@ export function useWebRTC() {
         },
       });
       const newTrack = newStream.getAudioTracks()[0];
-      const stream = localStreamRef.current;
+      let stream = localStreamRef.current;
       if (stream) {
         stream.addTrack(newTrack);
-        peerConnections.current.forEach(({ pc }) => {
-          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
-          if (sender) {
-            sender.replaceTrack(newTrack).catch(() => {});
-          }
-        });
-        // Update the React state so the UI picks up the new stream
-        setLocalStream(new MediaStream(stream.getTracks()));
+      } else {
+        // Previous stream was nulled out — create a fresh one
+        stream = new MediaStream([newTrack]);
+        localStreamRef.current = stream;
       }
+      peerConnections.current.forEach(({ pc }) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+        if (sender) {
+          sender.replaceTrack(newTrack).catch(() => {});
+        }
+      });
+      // Update the React state so the UI picks up the new stream
+      setLocalStream(new MediaStream(stream.getTracks()));
       return newTrack;
     } catch (err) {
       console.warn("Failed to restart audio after STT:", err);

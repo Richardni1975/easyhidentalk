@@ -204,10 +204,12 @@ export default function ChatPanel({
     recognitionRef.current = recognition;
     listeningRef.current = true;
     setIsListening(true);
-    setInterimText("正在准备语音识别...");
+    setInterimText("正在释放麦克风...");
 
-    // On mobile, brief delay so browser can release WebRTC mic hardware
-    setTimeout(() => {
+    // On mobile, give the browser time to fully release WebRTC mic hardware.
+    // stopAudioTrackForStt nulls the MediaStream, then the OS needs time
+    // to free the mic before SpeechRecognition can acquire it.
+    const startRecognition = () => {
       if (!listeningRef.current) return;
       try {
         recognition.start();
@@ -215,7 +217,12 @@ export default function ChatPanel({
       } catch {
         stopStt();
       }
-    }, 200);
+    };
+
+    setTimeout(() => {
+      setInterimText("正在启动语音识别...");
+      setTimeout(startRecognition, 400);
+    }, 300);
   }, [isMomo, onVoiceInputChange, stopStt]);
 
   const handleSend = () => {

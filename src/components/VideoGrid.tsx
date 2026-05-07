@@ -57,6 +57,8 @@ export default function VideoGrid({
     return "grid-cols-2";
   }, [count]);
 
+  // Smaller padding/gap on mobile for more video area
+
   // Screen sharing mode: show only compact avatar list
   if (screenSharing) {
     return (
@@ -98,7 +100,7 @@ export default function VideoGrid({
     <div className="flex-1 flex flex-col min-h-0">
       {/* Video tiles */}
       {count > 0 && (
-        <div className={`grid ${gridClass} gap-3 p-4 auto-rows-fr`}>
+        <div className={`grid ${gridClass} gap-2 md:gap-3 p-2 md:p-4 auto-rows-fr h-full min-h-0`}>
           {videoParticipants.map((p) => (
             <VideoTile
               key={p.peerId}
