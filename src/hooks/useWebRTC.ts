@@ -122,18 +122,16 @@ export function useWebRTC() {
       // If screen sharing is active, also add screen tracks for this new peer
       if (localScreenStreamRef.current) {
         const screenTrack = localScreenStreamRef.current.getVideoTracks()[0];
+        const screenAudioTrack = localScreenStreamRef.current.getAudioTracks()[0];
         if (screenTrack) {
+          // Use ONE stream for both video + audio so remote side gets a single
+          // stream with both tracks (same streamId -> same screenShareStreams entry)
           const screenStream = new MediaStream([screenTrack]);
           const sender = pc.addTrack(screenTrack, screenStream);
-          if (sender) {
-            screenSenders.current.set(peerId, sender);
-          }
-        }
-        const screenAudioTrack = localScreenStreamRef.current.getAudioTracks()[0];
-        if (screenAudioTrack) {
-          const audioSender = pc.addTrack(screenAudioTrack, new MediaStream([screenAudioTrack]));
-          if (audioSender) {
-            screenAudioSenders.current.set(peerId, audioSender);
+          if (sender) screenSenders.current.set(peerId, sender);
+          if (screenAudioTrack) {
+            const audioSender = pc.addTrack(screenAudioTrack, screenStream);
+            if (audioSender) screenAudioSenders.current.set(peerId, audioSender);
           }
         }
       }
@@ -220,19 +218,13 @@ export function useWebRTC() {
     peerConnections.current.forEach(({ pc }, peerId) => {
       if (screenSenders.current.has(peerId)) return;
       try {
-        const tracks: MediaStreamTrack[] = [screenTrack];
-        if (screenAudioTrack) tracks.push(screenAudioTrack);
-        const screenMediaStream = new MediaStream(tracks);
+        // One stream for both video + audio so remote side gets a single stream
+        const screenMediaStream = new MediaStream([screenTrack]);
         const sender = pc.addTrack(screenTrack, screenMediaStream);
-        if (sender) {
-          screenSenders.current.set(peerId, sender);
-        }
-        // Add audio track separately if present
+        if (sender) screenSenders.current.set(peerId, sender);
         if (screenAudioTrack && !screenAudioSenders.current.has(peerId)) {
-          const audioSender = pc.addTrack(screenAudioTrack, new MediaStream([screenAudioTrack]));
-          if (audioSender) {
-            screenAudioSenders.current.set(peerId, audioSender);
-          }
+          const audioSender = pc.addTrack(screenAudioTrack, screenMediaStream);
+          if (audioSender) screenAudioSenders.current.set(peerId, audioSender);
         }
       } catch (err) {
         console.warn(`Failed to add screen track to peer ${peerId}:`, err);
