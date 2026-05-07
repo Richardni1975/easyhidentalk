@@ -139,6 +139,13 @@ export default function ChatPanel({
       return;
     }
 
+    // Secure context check (mobile browsers block mic APIs on HTTP)
+    if (window.isSecureContext === false) {
+      setInterimText("语音输入需要 HTTPS 连接");
+      setTimeout(() => stopStt(), 2000);
+      return;
+    }
+
     // Notify parent to release the WebRTC mic so STT can access it
     onVoiceInputChange?.(true);
 
@@ -152,15 +159,8 @@ export default function ChatPanel({
     // Tracks probe success → startRecog failure cycles for mobile diagnostics
     let probeSuccessCount = 0;
 
-    // Start a fresh SpeechRecognition instance
-    const startRecog = () => {
-      if (!listeningRef.current) return;
-
-      const recog = new SpeechRecognitionAPI();
-      recog.lang = "zh-CN";
-      recog.interimResults = true;
-      recog.continuous = true;
-
+    // Shared recognition event handlers
+    const setupRecog = (recog: any) => {
       let errored = false;
 
       recog.onresult = (event: any) => {
@@ -201,11 +201,10 @@ export default function ChatPanel({
       };
 
       recog.onerror = (event: any) => {
+        console.error("SpeechRecognition error:", event.error, event.message || "");
         if (event.error === "audio-capture" || event.error === "not-allowed") {
           errored = true;
           if (probeSuccessCount >= 2) {
-            // Probe confirmed mic is free but SpeechRecognition keeps failing —
-            // likely a browser compatibility issue on this device
             setInterimText("设备不支持语音识别，请使用桌面版Chrome");
             setTimeout(() => stopStt(), 2000);
           } else if (sttRetryRef.current < RETRY_DELAYS.length) {
@@ -224,16 +223,19 @@ export default function ChatPanel({
 
       recog.onend = () => {
         if (!listeningRef.current) return;
-        if (errored) return; // error handler already scheduled retry
-        // Normal end — e.g. browser timeout with continuous:true.
-        // Use probe() instead of direct startRecog() because the mic might
-        // still be releasing from the previous session. probe() waits for
-        // the mic to become available before creating a new instance.
+        if (errored) return;
         sttRetryRef.current = 0;
         probeSuccessCount = 0;
         setTimeout(probe, 50);
       };
 
+      return recog;
+    };
+
+    // Start a fresh SpeechRecognition instance
+    const startRecog = () => {
+      if (!listeningRef.current) return;
+      const recog = setupRecog(new SpeechRecognitionAPI());
       try {
         recog.start();
         recognitionRef.current = recog;
@@ -255,15 +257,12 @@ export default function ChatPanel({
       navigator.mediaDevices
         .getUserMedia({ audio: true })
         .then((probeStream) => {
-          // Mic is free. Release probe and start SpeechRecognition
-          // in the same tick — no gap where the mic could be retaken.
           probeStream.getTracks().forEach((t) => t.stop());
           if (!listeningRef.current) return;
           probeSuccessCount++;
           startRecog();
         })
         .catch(() => {
-          // Mic still busy — retry
           if (sttRetryRef.current < RETRY_DELAYS.length) {
             const delay = RETRY_DELAYS[sttRetryRef.current];
             sttRetryRef.current++;
@@ -276,10 +275,19 @@ export default function ChatPanel({
         });
     };
 
-    // Probe mic availability first, then start SpeechRecognition
-    // immediately in the probe success handler. This avoids a guaranteed
-    // failure cycle on mobile where the mic release is still in progress.
-    probe();
+    // Try direct start first (synchronous, preserves user gesture for mobile).
+    // On iOS Safari, SpeechRecognition.start() must be called synchronously
+    // within a user-initiated event. If it fails (mic still held by WebRTC),
+    // fall back to the probe mechanism.
+    const directRecog = setupRecog(new SpeechRecognitionAPI());
+    try {
+      directRecog.start();
+      recognitionRef.current = directRecog;
+      setInterimText("");
+    } catch {
+      // Direct start failed — use probe-based retry
+      probe();
+    }
   }, [isMomo, onVoiceInputChange, stopStt]);
 
   const handleSend = () => {
