@@ -167,21 +167,25 @@ function MeetingRoomInner() {
     });
 
     const unsubOffer = on("offer", async ({ from, offer }: any) => {
-      createPeerConnection(
-        from,
-        stream,
-        (peerId, candidate) => {
-          emit("ice-candidate", { to: peerId, candidate });
-        },
-        () => {},
-        (peerId, state) => {
-          if (state === "disconnected" || state === "failed") {
-            removeParticipant(peerId);
+      // Try handling renegotiation first (PC already exists)
+      let answer = await handleOffer(from, offer);
+      if (!answer) {
+        // No existing PC — first time connection, create one
+        createPeerConnection(
+          from,
+          stream,
+          (peerId, candidate) => {
+            emit("ice-candidate", { to: peerId, candidate });
+          },
+          () => {},
+          (peerId, state) => {
+            if (state === "disconnected" || state === "failed") {
+              removeParticipant(peerId);
+            }
           }
-        }
-      );
-
-      const answer = await handleOffer(from, offer);
+        );
+        answer = await handleOffer(from, offer);
+      }
       if (answer) emit("answer", { to: from, answer });
     });
 
@@ -335,16 +339,32 @@ function MeetingRoomInner() {
       stopScreenShare();
       setScreenSharingPeerId(null);
       emit("stop-screen-share");
+      // Renegotiate to remove the screen track from existing PCs
+      participants.forEach((p) => {
+        if (p.peerId !== peerId) {
+          createOffer(p.peerId).then((offer) => {
+            if (offer) emit("offer", { to: p.peerId, offer });
+          });
+        }
+      });
     } else {
       try {
         await startScreenShare();
         setScreenSharingPeerId(peerId);
         emit("start-screen-share");
+        // Renegotiate with existing peers so they receive the screen track
+        participants.forEach((p) => {
+          if (p.peerId !== peerId) {
+            createOffer(p.peerId).then((offer) => {
+              if (offer) emit("offer", { to: p.peerId, offer });
+            });
+          }
+        });
       } catch (err) {
         // User cancelled
       }
     }
-  }, [screenSharingPeerId, startScreenShare, stopScreenShare, emit, peerId]);
+  }, [screenSharingPeerId, startScreenShare, stopScreenShare, createOffer, emit, peerId, participants]);
 
   const handleStopScreenShare = useCallback(() => {
     stopScreenShare();
