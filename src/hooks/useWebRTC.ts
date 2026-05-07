@@ -251,18 +251,47 @@ export function useWebRTC() {
   }, []);
 
   const toggleAudio = useCallback(
-    (enabled: boolean) => {
-      const track = localStreamRef.current?.getAudioTracks()[0];
-      if (!track) return;
-      // Keep track.enabled true and use replaceTrack for reliable on/off control.
-      // This avoids releasing the mic hardware on mobile (enabled=false can lose it).
-      track.enabled = true;
-      peerConnections.current.forEach(({ pc }) => {
-        const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
-        if (sender) {
-          sender.replaceTrack(enabled ? track : null).catch(() => {});
+    async (enabled: boolean) => {
+      if (enabled) {
+        let track = localStreamRef.current?.getAudioTracks()[0];
+        // If the track was ended by the browser (common on mobile after replaceTrack(null)),
+        // get a fresh track via getUserMedia.
+        if (!track || track.readyState === "ended") {
+          try {
+            const newStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: { exact: true },
+                noiseSuppression: { exact: true },
+                autoGainControl: { exact: true },
+              },
+            });
+            track = newStream.getAudioTracks()[0];
+            const s = localStreamRef.current;
+            if (s) {
+              s.getAudioTracks().forEach((t) => {
+                t.stop();
+                s.removeTrack(t);
+              });
+              s.addTrack(track);
+            } else {
+              localStreamRef.current = newStream;
+            }
+          } catch (err) {
+            console.warn("Failed to get new audio track:", err);
+            return;
+          }
         }
-      });
+        track.enabled = true;
+        peerConnections.current.forEach(({ pc }) => {
+          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+          if (sender) sender.replaceTrack(track).catch(() => {});
+        });
+      } else {
+        peerConnections.current.forEach(({ pc }) => {
+          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+          if (sender) sender.replaceTrack(null).catch(() => {});
+        });
+      }
     },
     []
   );
@@ -314,17 +343,49 @@ export function useWebRTC() {
   }, []);
 
   const toggleVideo = useCallback(
-    (enabled: boolean) => {
-      const track = localStreamRef.current?.getVideoTracks()[0];
-      if (!track) return;
-      // Same approach as toggleAudio: keep hardware active, control sending.
-      track.enabled = true;
-      peerConnections.current.forEach(({ pc }) => {
-        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) {
-          sender.replaceTrack(enabled ? track : null).catch(() => {});
+    async (enabled: boolean) => {
+      if (enabled) {
+        let track = localStreamRef.current?.getVideoTracks()[0];
+        // If the track was ended by the browser (common on mobile after replaceTrack(null)),
+        // get a fresh track via getUserMedia.
+        if (!track || track.readyState === "ended") {
+          try {
+            const newStream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: "user",
+              },
+            });
+            track = newStream.getVideoTracks()[0];
+            const s = localStreamRef.current;
+            if (s) {
+              s.getVideoTracks().forEach((t) => {
+                t.stop();
+                s.removeTrack(t);
+              });
+              s.addTrack(track);
+              setLocalStream(new MediaStream(s.getTracks()));
+            } else {
+              localStreamRef.current = newStream;
+              setLocalStream(newStream);
+            }
+          } catch (err) {
+            console.warn("Failed to get new video track:", err);
+            return;
+          }
         }
-      });
+        track.enabled = true;
+        peerConnections.current.forEach(({ pc }) => {
+          const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+          if (sender) sender.replaceTrack(track).catch(() => {});
+        });
+      } else {
+        peerConnections.current.forEach(({ pc }) => {
+          const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+          if (sender) sender.replaceTrack(null).catch(() => {});
+        });
+      }
     },
     []
   );
