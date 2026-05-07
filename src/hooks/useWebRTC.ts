@@ -321,9 +321,8 @@ export function useWebRTC() {
         sender.replaceTrack(null).catch(() => {});
       }
     });
-    // Fully release the MediaStream object so the browser frees the mic hardware
-    localStreamRef.current = null;
-    setLocalStream(null);
+    // Update React state so the UI reflects the stream (video still intact)
+    setLocalStream(new MediaStream(stream.getTracks()));
   }, []);
 
   /** Recreate the audio track after STT finishes */
