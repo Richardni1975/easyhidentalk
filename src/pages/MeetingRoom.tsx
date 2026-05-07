@@ -278,6 +278,11 @@ function MeetingRoomInner() {
       setPolls(existingPolls);
     });
 
+    // If someone was already sharing screen when we joined
+    const unsubCurrentShare = on("current-screen-share", (data: { peerId: string }) => {
+      setScreenSharingPeerId(data.peerId);
+    });
+
     return () => {
       unsubExisting();
       unsubJoined();
@@ -293,6 +298,7 @@ function MeetingRoomInner() {
       unsubExistingMsgs();
       unsubScreenStarted();
       unsubScreenStopped();
+      unsubCurrentShare();
       unsubForceCam();
       unsubPollCreated();
       unsubPollUpdated();

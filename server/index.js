@@ -38,6 +38,7 @@ const roomPolls = new Map(); // roomId -> Map of pollId -> pollData
 const roomMessages = new Map(); // roomId -> array of chat messages
 
 const peerSockets = new Map(); // peerId -> socket.id for direct messaging (offer/answer/ICE)
+const roomScreenShares = new Map(); // roomId -> peerId of active screen sharer
 
 // Track pending removals (grace period before actually removing a participant)
 const pendingRemovals = new Map(); // peerId -> { timeout, roomId }
@@ -127,6 +128,12 @@ io.on("connection", (socket) => {
     const existingMsgs = roomMessages.get(roomId);
     if (existingMsgs && existingMsgs.length > 0) {
       socket.emit("existing-messages", existingMsgs);
+    }
+
+    // If someone is sharing their screen, tell the new joiner
+    const currentSharer = roomScreenShares.get(roomId);
+    if (currentSharer) {
+      socket.emit("current-screen-share", { peerId: currentSharer });
     }
 
     // Notify others only if this is a fresh join, not a reconnect
@@ -269,6 +276,7 @@ io.on("connection", (socket) => {
 
   socket.on("start-screen-share", () => {
     if (!currentRoom) return;
+    roomScreenShares.set(currentRoom, currentPeerId);
     socket.to(currentRoom).emit("screen-share-started", {
       peerId: currentPeerId,
     });
@@ -276,6 +284,7 @@ io.on("connection", (socket) => {
 
   socket.on("stop-screen-share", () => {
     if (!currentRoom) return;
+    roomScreenShares.delete(currentRoom);
     socket.to(currentRoom).emit("screen-share-stopped", {
       peerId: currentPeerId,
     });
@@ -384,6 +393,7 @@ io.on("connection", (socket) => {
 
         if (room.size === 0) {
           rooms.delete(currentRoom);
+          roomScreenShares.delete(currentRoom);
         } else {
           // If the host left, promote the earliest-remaining participant
           if (wasHost) {
