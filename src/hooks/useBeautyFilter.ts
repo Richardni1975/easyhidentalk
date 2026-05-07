@@ -54,7 +54,7 @@ export function useBeautyFilter(
         const pipeline = new BeautyPipeline(stream, width, height);
         const out = pipeline.start();
         if (!out) {
-          // WebGL2 not available
+          // Canvas2D not available
           pipeline.destroy();
           return prev;
         }

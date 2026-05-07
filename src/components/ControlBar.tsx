@@ -150,7 +150,7 @@ export default function ControlBar({
       <button
         onClick={onToggleBeauty}
         className={btnClass(beautyEnabled ? "active" : "default")}
-        title={beautyEnabled ? "关闭美颜" : "开启美颜"}
+        title={beautyEnabled ? "关闭滤镜" : "印象滤镜"}
       >
         {iconBeauty}
       </button>
