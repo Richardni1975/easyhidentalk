@@ -256,13 +256,27 @@ export default function ChatPanel({
       }
 
       const text = lines.join("\n");
-      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `聊天记录_${now.toISOString().slice(0, 10)}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
+
+      if (window.innerWidth < 768) {
+        // Mobile: open in new tab for easier reading
+        const win = window.open("", "_blank");
+        if (win) {
+          const safe = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          win.document.write(
+            `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>聊天记录</title></head><body><pre style="font-family:monospace;font-size:14px;padding:16px;word-wrap:break-word;white-space:pre-wrap;background:#fff;color:#333">${safe}</pre></body></html>`
+          );
+          win.document.close();
+        }
+      } else {
+        // Desktop: download as .txt
+        const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `聊天记录_${now.toISOString().slice(0, 10)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
     } catch (err) {
       console.error("导出失败:", err);
     }
