@@ -347,6 +347,14 @@ function MeetingRoomInner() {
     emit("stop-screen-share");
   }, [stopScreenShare, emit]);
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Ensure mobile starts at video panel (leftmost), not chat
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (el) el.scrollLeft = 0;
+  }, []);
+
   // Save pre-STT mute state so we can restore it properly
   const preSttMuteRef = useRef(false);
   const handleVoiceInputChange = useCallback(
@@ -495,7 +503,10 @@ function MeetingRoomInner() {
       </div>
 
       {/* Main swipeable area — mobile: horizontal snap only, no vertical scroll */}
-      <div className="flex-1 flex overflow-x-auto overflow-y-hidden md:overflow-hidden snap-x snap-mandatory min-h-0 overscroll-x-contain overscroll-y-none">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 flex overflow-x-auto overflow-y-hidden md:overflow-hidden snap-x snap-mandatory min-h-0 overscroll-x-contain overscroll-y-none"
+      >
         {/* LEFT: Video panel */}
         <div className="w-full md:w-1/2 flex-shrink-0 snap-start flex flex-col min-h-0">
           {/* Video content */}
@@ -549,6 +560,11 @@ function MeetingRoomInner() {
             )}
           </div>
 
+          {/* Mobile swipe hint */}
+          <div className="md:hidden text-center py-1 text-dark-500 text-xs flex-shrink-0">
+            &larr; 向左滑动，进入聊天区
+          </div>
+
           {/* Mobile: bottom control bar */}
           <div className="md:hidden flex items-center justify-center py-2 px-4 bg-dark-900/80 border-t border-dark-800 flex-shrink-0">
             <ControlBar
@@ -583,7 +599,7 @@ function MeetingRoomInner() {
         </div>
 
         {/* RIGHT: Chat panel */}
-        <div className="w-full md:w-1/2 flex-shrink-0 snap-end flex flex-col min-h-0">
+        <div className="w-full md:w-1/2 flex-shrink-0 snap-start flex flex-col min-h-0">
           <ChatPanel
             messages={chatMessages}
             onSend={handleSendChat}

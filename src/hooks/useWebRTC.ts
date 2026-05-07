@@ -253,39 +253,33 @@ export function useWebRTC() {
   const toggleAudio = useCallback(
     async (enabled: boolean) => {
       if (enabled) {
-        let track = localStreamRef.current?.getAudioTracks()[0];
-        // If the track was ended by the browser (common on mobile after replaceTrack(null)),
-        // get a fresh track via getUserMedia.
-        if (!track || track.readyState === "ended") {
-          try {
-            const newStream = await navigator.mediaDevices.getUserMedia({
-              audio: {
-                echoCancellation: { exact: true },
-                noiseSuppression: { exact: true },
-                autoGainControl: { exact: true },
-              },
+        try {
+          const newStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: { exact: true },
+              noiseSuppression: { exact: true },
+              autoGainControl: { exact: true },
+            },
+          });
+          const track = newStream.getAudioTracks()[0];
+          const s = localStreamRef.current;
+          if (s) {
+            s.getAudioTracks().forEach((t) => {
+              t.stop();
+              s.removeTrack(t);
             });
-            track = newStream.getAudioTracks()[0];
-            const s = localStreamRef.current;
-            if (s) {
-              s.getAudioTracks().forEach((t) => {
-                t.stop();
-                s.removeTrack(t);
-              });
-              s.addTrack(track);
-            } else {
-              localStreamRef.current = newStream;
-            }
-          } catch (err) {
-            console.warn("Failed to get new audio track:", err);
-            return;
+            s.addTrack(track);
+          } else {
+            localStreamRef.current = newStream;
           }
+          track.enabled = true;
+          peerConnections.current.forEach(({ pc }) => {
+            const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+            if (sender) sender.replaceTrack(track).catch(() => {});
+          });
+        } catch (err) {
+          console.warn("Failed to get new audio track:", err);
         }
-        track.enabled = true;
-        peerConnections.current.forEach(({ pc }) => {
-          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
-          if (sender) sender.replaceTrack(track).catch(() => {});
-        });
       } else {
         peerConnections.current.forEach(({ pc }) => {
           const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
@@ -345,41 +339,35 @@ export function useWebRTC() {
   const toggleVideo = useCallback(
     async (enabled: boolean) => {
       if (enabled) {
-        let track = localStreamRef.current?.getVideoTracks()[0];
-        // If the track was ended by the browser (common on mobile after replaceTrack(null)),
-        // get a fresh track via getUserMedia.
-        if (!track || track.readyState === "ended") {
-          try {
-            const newStream = await navigator.mediaDevices.getUserMedia({
-              video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: "user",
-              },
+        try {
+          const newStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              facingMode: "user",
+            },
+          });
+          const track = newStream.getVideoTracks()[0];
+          const s = localStreamRef.current;
+          if (s) {
+            s.getVideoTracks().forEach((t) => {
+              t.stop();
+              s.removeTrack(t);
             });
-            track = newStream.getVideoTracks()[0];
-            const s = localStreamRef.current;
-            if (s) {
-              s.getVideoTracks().forEach((t) => {
-                t.stop();
-                s.removeTrack(t);
-              });
-              s.addTrack(track);
-              setLocalStream(new MediaStream(s.getTracks()));
-            } else {
-              localStreamRef.current = newStream;
-              setLocalStream(newStream);
-            }
-          } catch (err) {
-            console.warn("Failed to get new video track:", err);
-            return;
+            s.addTrack(track);
+            setLocalStream(new MediaStream(s.getTracks()));
+          } else {
+            localStreamRef.current = newStream;
+            setLocalStream(newStream);
           }
+          track.enabled = true;
+          peerConnections.current.forEach(({ pc }) => {
+            const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+            if (sender) sender.replaceTrack(track).catch(() => {});
+          });
+        } catch (err) {
+          console.warn("Failed to get new video track:", err);
         }
-        track.enabled = true;
-        peerConnections.current.forEach(({ pc }) => {
-          const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-          if (sender) sender.replaceTrack(track).catch(() => {});
-        });
       } else {
         peerConnections.current.forEach(({ pc }) => {
           const sender = pc.getSenders().find((s) => s.track?.kind === "video");
