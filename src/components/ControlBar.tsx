@@ -16,9 +16,6 @@ interface ControlBarProps {
   includeSystemAudio?: boolean;
   /** Toggle system audio capture */
   onToggleSystemAudio?: () => void;
-  /** Beauty filter toggle */
-  beautyEnabled?: boolean;
-  onToggleBeauty?: () => void;
 }
 
 type ButtonStyle = "default" | "danger" | "active" | "warning";
@@ -79,13 +76,7 @@ const iconCameraOff = (
   </svg>
 );
 
-const iconBeauty = (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2l1.5 5.5L19 9l-5.5 1.5L12 16l-1.5-5.5L5 9l5.5-1.5L12 2zM12 16v6M8 20l4-2 4 2" />
-  </svg>
-);
-
-const iconScreen = (
+const iconScreen =(
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
   </svg>
@@ -117,8 +108,6 @@ export default function ControlBar({
   canScreenShare = true,
   includeSystemAudio,
   onToggleSystemAudio,
-  beautyEnabled,
-  onToggleBeauty,
 }: ControlBarProps) {
   const wrapper = vertical
     ? "flex flex-col items-center gap-5 py-4 px-1"
@@ -144,15 +133,6 @@ export default function ControlBar({
         title={isCameraOff ? "开启摄像头" : "关闭摄像头"}
       >
         {isCameraOff ? iconCameraOff : iconCameraOn}
-      </button>
-
-      {/* Beauty filter */}
-      <button
-        onClick={onToggleBeauty}
-        className={btnClass(beautyEnabled ? "active" : "default")}
-        title={beautyEnabled ? "关闭滤镜" : "印象滤镜"}
-      >
-        {iconBeauty}
       </button>
 
       {/* Screen share — only available to users in the 4 video slots */}

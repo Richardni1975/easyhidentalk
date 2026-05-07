@@ -443,17 +443,13 @@ function MeetingRoomInner() {
     [stopAudioTrackForStt, restartAudioTrackForStt, setIsMuted, emit]
   );
 
-  // Beauty filter
-  const {
-    beautyStream,
-    isBeautyOn,
-    toggleBeauty,
-  } = useBeautyFilter(localStream, { replaceVideoTrack });
+  // Beauty filter — always-on, processed stream replaces original
+  const { beautyStream } = useBeautyFilter(localStream, { replaceVideoTrack });
 
-  // Effective video stream for local display (beauty-processed if active)
+  // Effective video stream for local display (beauty-processed)
   const displayStream = useMemo(
-    () => (isBeautyOn && beautyStream ? beautyStream : localStream),
-    [isBeautyOn, beautyStream, localStream]
+    () => beautyStream ?? localStream,
+    [beautyStream, localStream]
   );
 
   // Host determination
@@ -647,9 +643,7 @@ function MeetingRoomInner() {
             canScreenShare={canScreenShare}
             includeSystemAudio={includeSystemAudio}
             onToggleSystemAudio={() => setIncludeSystemAudio((v) => !v)}
-            beautyEnabled={isBeautyOn}
-            onToggleBeauty={toggleBeauty}
-          />
+            />
         </div>
 
         {/* RIGHT: Video panel */}
@@ -728,8 +722,6 @@ function MeetingRoomInner() {
               canScreenShare={canScreenShare}
               includeSystemAudio={includeSystemAudio}
               onToggleSystemAudio={() => setIncludeSystemAudio((v) => !v)}
-              beautyEnabled={isBeautyOn}
-              onToggleBeauty={toggleBeauty}
             />
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useEffect, useState } from "react";
 import { BeautyPipeline, type BeautyParams } from "../utils/beautyPipeline";
 
 export interface UseBeautyFilterOptions {
@@ -16,76 +16,43 @@ export function useBeautyFilter(
 ) {
   const { replaceVideoTrack, width = 640, height = 480 } = options;
   const pipelineRef = useRef<BeautyPipeline | null>(null);
-  const originalTrackRef = useRef<MediaStreamTrack | null>(null);
-  const [isBeautyOn, setIsBeautyOn] = useState(false);
   const [beautyStream, setBeautyStream] = useState<MediaStream | null>(null);
 
-  // Store original video track when rawStream appears
+  // Auto-start pipeline when rawStream appears, auto-stop when it changes
   useEffect(() => {
-    if (rawStream) {
-      const vt = rawStream.getVideoTracks()[0];
-      if (vt) originalTrackRef.current = vt;
+    if (!rawStream) return;
+
+    const videoTrack = rawStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+
+    const pipeline = new BeautyPipeline(rawStream, width, height);
+    const out = pipeline.start();
+    if (!out) {
+      pipeline.destroy();
+      return;
     }
-  }, [rawStream]);
 
-  // Save stream in ref so toggle callback isn't stale
-  const rawStreamRef = useRef(rawStream);
-  rawStreamRef.current = rawStream;
+    pipelineRef.current = pipeline;
+    setBeautyStream(out);
 
-  const toggleBeauty = useCallback(() => {
-    setIsBeautyOn((prev) => {
-      if (prev) {
-        // ── Turn OFF ──
-        if (pipelineRef.current) {
-          pipelineRef.current.stop();
-          pipelineRef.current.destroy();
-          pipelineRef.current = null;
-        }
-        setBeautyStream(null);
-        // Restore original track
-        replaceVideoTrack(null);
-      } else {
-        // ── Turn ON ──
-        const stream = rawStreamRef.current;
-        if (!stream) return prev;
-        const videoTrack = stream.getVideoTracks()[0];
-        if (!videoTrack) return prev;
+    const beautyTrack = out.getVideoTracks()[0];
+    if (beautyTrack) {
+      replaceVideoTrack(beautyTrack);
+    }
 
-        const pipeline = new BeautyPipeline(stream, width, height);
-        const out = pipeline.start();
-        if (!out) {
-          // Canvas2D not available
-          pipeline.destroy();
-          return prev;
-        }
-
-        pipelineRef.current = pipeline;
-        setBeautyStream(out);
-
-        // Replace video track in peer connections with beauty track
-        const beautyTrack = out.getVideoTracks()[0];
-        if (beautyTrack) {
-          replaceVideoTrack(beautyTrack);
-        }
-      }
-      return !prev;
-    });
-  }, [replaceVideoTrack, width, height]);
-
-  const updateBeautyParams = useCallback((p: Partial<BeautyParams>) => {
-    pipelineRef.current?.updateParams(p);
-  }, []);
-
-  // Cleanup on unmount
-  useEffect(() => {
     return () => {
       if (pipelineRef.current) {
         pipelineRef.current.stop();
         pipelineRef.current.destroy();
         pipelineRef.current = null;
       }
+      setBeautyStream(null);
     };
+  }, [rawStream, replaceVideoTrack, width, height]);
+
+  const updateBeautyParams = useCallback((p: Partial<BeautyParams>) => {
+    pipelineRef.current?.updateParams(p);
   }, []);
 
-  return { beautyStream, isBeautyOn, toggleBeauty, updateBeautyParams };
+  return { beautyStream, updateBeautyParams };
 }
