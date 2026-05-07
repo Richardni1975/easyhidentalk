@@ -136,8 +136,8 @@ export class BeautyPipeline {
       this.canvas.height = vh;
     }
 
-    // How much to downscale: at intensity=1 → 1/8 resolution, at intensity=0 → 1/1
-    const scale = 1 / (1 + intensity * 7); // 1× to 8× reduction
+    // How much to downscale: at intensity=1 → 1/4 resolution, at intensity=0 → 1/1
+    const scale = 1 / (1 + intensity * 3); // 1× to 4× reduction
     const lw = Math.max(1, Math.round(vw * scale));
     const lh = Math.max(1, Math.round(vh * scale));
 
