@@ -152,7 +152,7 @@ export default function ChatPanel({
     listeningRef.current = true;
     sttRetryRef.current = 0;
     setIsListening(true);
-    setInterimText("正在释放麦克风...");
+    setInterimText("聆听中...");
 
     // Delays between retries (ms) when mic is busy
     const RETRY_DELAYS = [300, 500, 800, 1200, 2000, 3000];
@@ -193,7 +193,7 @@ export default function ChatPanel({
         if (finalText) {
           const trimmed = finalText.trim();
           if (!(trimmed.length <= 3 && /^[a-z]+$/i.test(trimmed))) {
-            setInput((prev) => prev + finalText);
+            setInput((prev) => prev + finalText + "。");
             setVoiceColoredText([]);
           }
         }
@@ -222,7 +222,7 @@ export default function ChatPanel({
           } else if (sttRetryRef.current < RETRY_DELAYS.length) {
             const delay = RETRY_DELAYS[sttRetryRef.current];
             sttRetryRef.current++;
-            setInterimText(`麦克风 ${".".repeat(Math.min(sttRetryRef.current, 5))} (${event.error})`);
+            setInterimText(`聆听中... (${event.error})`);
             setTimeout(() => probe(), delay);
           } else {
             setInterimText(`STT错误: ${event.error}，请重试`);
@@ -280,15 +280,14 @@ export default function ChatPanel({
           probeStream.getTracks().forEach((t) => t.stop());
           if (!listeningRef.current) return;
           probeSuccessCount++;
-          // 500ms breathing gap for mobile OS audio routing switch
-          setInterimText("准备麦克风...");
-          setTimeout(() => startRecog(), 500);
+          // Small gap for mobile OS audio routing switch
+          setTimeout(() => startRecog(), 200);
         })
         .catch(() => {
           if (sttRetryRef.current < RETRY_DELAYS.length) {
             const delay = RETRY_DELAYS[sttRetryRef.current];
             sttRetryRef.current++;
-            setInterimText(`正在获取麦克风${".".repeat(Math.min(sttRetryRef.current, 5))}`);
+            setInterimText("聆听中...");
             setTimeout(probe, delay);
           } else {
             setInterimText("无法获取麦克风，请重试");
@@ -799,7 +798,7 @@ export default function ChatPanel({
       <div className="p-3 border-t border-dark-700 space-y-2">
         {/* Real-time interim transcription preview */}
         {isListening && interimText && (
-          <div className="text-xs leading-relaxed px-2 py-1 rounded bg-dark-700/50 min-h-[20px] text-dark-300 italic">
+          <div className="text-sm leading-relaxed px-2 py-1.5 rounded bg-dark-700/50 min-h-[20px] text-blue-300 border border-blue-500/20">
             {interimText}
           </div>
         )}
