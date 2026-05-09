@@ -58,6 +58,33 @@ export function useWebRTC() {
   const savedVideoForSttRef = useRef<MediaStreamTrack | null>(null);
   const hadVideoForSttRef = useRef(false);
 
+  // Track per-peer disconnection timers for graceful recovery
+  const disconnectTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  function cleanupPeer(peerId: string) {
+    const existing = disconnectTimers.current.get(peerId);
+    if (existing) {
+      clearTimeout(existing);
+      disconnectTimers.current.delete(peerId);
+    }
+    peerConnections.current.delete(peerId);
+    pendingIceCandidates.current.delete(peerId);
+    mainStreamIdPerPeerRef.current.delete(peerId);
+    screenShareStreamsRef.current.delete(peerId);
+    screenSenders.current.delete(peerId);
+    screenAudioSenders.current.delete(peerId);
+    setRemoteStreams((prev) => {
+      const next = new Map(prev);
+      next.delete(peerId);
+      return next;
+    });
+    setScreenShareStreams((prev) => {
+      const next = new Map(prev);
+      next.delete(peerId);
+      return next;
+    });
+  }
+
   const startLocalStream = useCallback(async () => {
     const constraints: MediaStreamConstraints = {
       audio: {
@@ -106,6 +133,12 @@ export function useWebRTC() {
       const existing = peerConnections.current.get(peerId);
       if (existing) {
         existing.pc.close();
+        // Clear pending disconnect timer so stale cleanup doesn't fire
+        const timer = disconnectTimers.current.get(peerId);
+        if (timer) {
+          clearTimeout(timer);
+          disconnectTimers.current.delete(peerId);
+        }
         peerConnections.current.delete(peerId);
         pendingIceCandidates.current.delete(peerId);
         mainStreamIdPerPeerRef.current.delete(peerId);
@@ -121,8 +154,10 @@ export function useWebRTC() {
         rtcpMuxPolicy: "require",
       });
 
-      // Add local tracks (camera + audio)
-      stream.getTracks().forEach((track) => {
+      // Add local tracks — use ref for latest track state
+      // so freshly-joined peers get the beauty-processed video track
+      const trackSource = localStreamRef.current || stream;
+      trackSource.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
       });
 
@@ -190,25 +225,32 @@ export function useWebRTC() {
 
       pc.onconnectionstatechange = () => {
         onConnectionState(peerId, pc.connectionState);
-        if (
-          pc.connectionState === "disconnected" ||
-          pc.connectionState === "failed"
-        ) {
-          setRemoteStreams((prev) => {
-            const next = new Map(prev);
-            next.delete(peerId);
-            return next;
-          });
-          setScreenShareStreams((prev) => {
-            const next = new Map(prev);
-            next.delete(peerId);
-            return next;
-          });
-          screenShareStreamsRef.current.delete(peerId);
-          screenSenders.current.delete(peerId);
-          screenAudioSenders.current.delete(peerId);
-          mainStreamIdPerPeerRef.current.delete(peerId);
-          peerConnections.current.delete(peerId);
+
+        if (pc.connectionState === "disconnected") {
+          // Disconnected is often transient (network blip, mobile handoff).
+          // Wait 4s before cleaning up — the PC might reconnect on its own.
+          const existing = disconnectTimers.current.get(peerId);
+          if (existing) clearTimeout(existing);
+
+          const timer = setTimeout(() => {
+            if (pc.connectionState !== "connected") {
+              cleanupPeer(peerId);
+            }
+            disconnectTimers.current.delete(peerId);
+          }, 4000);
+          disconnectTimers.current.set(peerId, timer);
+        } else if (pc.connectionState === "failed") {
+          // Failed is permanent — clean up immediately
+          const existing = disconnectTimers.current.get(peerId);
+          if (existing) clearTimeout(existing);
+          cleanupPeer(peerId);
+        } else if (pc.connectionState === "connected") {
+          // Recovered — cancel pending disconnect
+          const existing = disconnectTimers.current.get(peerId);
+          if (existing) {
+            clearTimeout(existing);
+            disconnectTimers.current.delete(peerId);
+          }
         }
       };
 
@@ -519,34 +561,69 @@ export function useWebRTC() {
     }
   }, []);
 
+  // Serialize SDP operations per-peer to prevent glare and "wrong state" errors
+  const signalingQueue = useRef<Map<string, Promise<void>>>(new Map());
+
+  function chainSignaling(peerId: string, fn: () => Promise<void>): Promise<void> {
+    const prev = signalingQueue.current.get(peerId) || Promise.resolve();
+    const next = prev.then(fn).catch(fn); // run next even if prev errored
+    signalingQueue.current.set(peerId, next);
+    return next;
+  }
+
   const createOffer = useCallback(
     async (peerId: string) => {
-      const pc = peerConnections.current.get(peerId)?.pc;
-      if (!pc) return null;
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      return offer;
+      const entry = peerConnections.current.get(peerId);
+      if (!entry) return null;
+      const pc = entry.pc;
+
+      return chainSignaling(peerId, async () => {
+        if (pc.signalingState === "stable") {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          return offer;
+        }
+        console.warn(`createOffer skipped: ${peerId} in state ${pc.signalingState}`);
+        return null;
+      }) as Promise<any>;
     },
     []
   );
 
   const handleOffer = useCallback(
     async (peerId: string, offer: RTCSessionDescriptionInit) => {
-      const pc = peerConnections.current.get(peerId)?.pc;
-      if (!pc) return null;
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      return answer;
+      const entry = peerConnections.current.get(peerId);
+      if (!entry) return null;
+      const pc = entry.pc;
+
+      return chainSignaling(peerId, async () => {
+        // Polite peer: rollback if we have a local offer pending (glare resolution)
+        if (pc.signalingState !== "stable") {
+          await pc.setLocalDescription({ type: "rollback" });
+        }
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        return answer;
+      }) as Promise<any>;
     },
     []
   );
 
   const handleAnswer = useCallback(
     async (peerId: string, answer: RTCSessionDescriptionInit) => {
-      const pc = peerConnections.current.get(peerId)?.pc;
-      if (!pc) return;
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      const entry = peerConnections.current.get(peerId);
+      if (!entry) return;
+      const pc = entry.pc;
+
+      return chainSignaling(peerId, async () => {
+        // Only accept answer if we were expecting one
+        if (pc.signalingState !== "have-local-offer") {
+          console.warn(`Ignored answer for ${peerId} (state: ${pc.signalingState})`);
+          return;
+        }
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      });
     },
     []
   );
@@ -564,7 +641,10 @@ export function useWebRTC() {
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error("Failed to add ICE candidate:", err);
+        // Ignore errors from closed connections or stale candidates
+        if (pc.connectionState !== "closed") {
+          console.warn("Failed to add ICE candidate:", err);
+        }
       }
     },
     []
