@@ -31,27 +31,21 @@ export class BeautyPipeline {
     this.height = height;
     this.inputStream = inputStream;
 
-    // Hidden video element to feed frames
+    // Hidden video element to feed frames (no DOM append needed)
     this.inputVideo = document.createElement("video");
     this.inputVideo.srcObject = inputStream;
     this.inputVideo.playsInline = true;
     this.inputVideo.muted = true;
     this.inputVideo.setAttribute("playsinline", "");
-    this.inputVideo.style.display = "none";
-    document.body.appendChild(this.inputVideo);
 
-    // Main canvas (will be captured)
+    // Main canvas (will be captured) — no DOM append needed
     const c = document.createElement("canvas");
     c.width = width;
     c.height = height;
-    c.style.display = "none";
-    document.body.appendChild(c);
     this.canvas = c;
 
-    // Offscreen canvas for the low-res intermediate
+    // Offscreen canvas for the low-res intermediate — no DOM append needed
     this.offscreen = document.createElement("canvas");
-    this.offscreen.style.display = "none";
-    document.body.appendChild(this.offscreen);
   }
 
   start(): MediaStream | null {
@@ -67,7 +61,7 @@ export class BeautyPipeline {
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cs = (this.canvas as any).captureStream(30) as MediaStream;
+      const cs = (this.canvas as any).captureStream(20) as MediaStream;
       this.outputStream = cs;
     } catch (e) {
       console.warn("Paint filter: captureStream not supported", e);
@@ -107,7 +101,7 @@ export class BeautyPipeline {
     this.animFrameId = requestAnimationFrame(this.tick);
 
     const elapsed = now - this.lastFrameTime;
-    if (elapsed < 33) return; // ~30fps
+    if (elapsed < 50) return; // ~20fps
     this.lastFrameTime = now;
 
     const v = this.inputVideo;
@@ -156,49 +150,35 @@ export class BeautyPipeline {
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(this.offscreen, 0, 0, vw, vh);
 
-    // Step 3: Mild blur for natural smoothness (softens color patch boundaries)
-    if (intensity > 0.1) {
-      const blurRadius = 0.5 + intensity * 2.5; // ~0.6px → 3px
-      // Resize offscreen to full resolution for use as blur source
+    // Step 3: Combined blur + saturation in a single GPU filter pass.
+    // Eliminates the expensive getImageData/putImageData round-trip (GPU → CPU → GPU)
+    // that was allocating ~3.7 MB of garbage per frame at 720p.
+    if (intensity > 0.1 || vibrance > 0) {
+      // Resize offscreen to full resolution for use as temporary buffer
       if (this.offscreen.width !== vw || this.offscreen.height !== vh) {
         this.offscreen.width = vw;
         this.offscreen.height = vh;
       }
       offCtx.drawImage(this.canvas, 0, 0); // copy current output
-      ctx.filter = `blur(${blurRadius}px)`;
+
+      const filters: string[] = [];
+      if (intensity > 0.1) {
+        const blurRadius = 0.5 + intensity * 2.5; // ~0.6px → 3px
+        filters.push(`blur(${blurRadius}px)`);
+      }
+      if (vibrance > 0) {
+        const sat = 1 + vibrance * 0.6; // default 0.3 → saturate(1.18)
+        filters.push(`saturate(${sat})`);
+      }
+      ctx.filter = filters.join(" ");
       ctx.drawImage(this.offscreen, 0, 0);
       ctx.filter = "none";
-    }
-
-    // Step 4: Optional vibrance boost (oil painting color feel)
-    if (vibrance > 0) {
-      const imageData = ctx.getImageData(0, 0, vw, vh);
-      const d = imageData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const r = d[i], g = d[i + 1], b = d[i + 2];
-        const avg = (r + g + b) / 3;
-        // Push colors away from gray → more saturated
-        const f = 1 + vibrance * 0.6;
-        d[i]     = Math.min(255, avg + (r - avg) * f);
-        d[i + 1] = Math.min(255, avg + (g - avg) * f);
-        d[i + 2] = Math.min(255, avg + (b - avg) * f);
-      }
-      ctx.putImageData(imageData, 0, 0);
     }
   }
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   destroy(): void {
     this.stop();
-    if (this.canvas.parentNode) {
-      this.canvas.parentNode.removeChild(this.canvas);
-    }
-    if (this.offscreen.parentNode) {
-      this.offscreen.parentNode.removeChild(this.offscreen);
-    }
-    if (this.inputVideo.parentNode) {
-      this.inputVideo.parentNode.removeChild(this.inputVideo);
-    }
     this.inputStream = null;
   }
 }

@@ -68,7 +68,9 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
       )) {
         return prev;
       }
-      return [...prev, msg];
+      const next = [...prev, msg];
+      if (next.length > 200) next.splice(0, next.length - 200);
+      return next;
     });
   }, []);
 

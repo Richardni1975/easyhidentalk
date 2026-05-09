@@ -149,7 +149,7 @@ export function useWebRTC() {
 
       const pc = new RTCPeerConnection({
         iceServers: ICE_SERVERS,
-        iceCandidatePoolSize: 10,
+        iceCandidatePoolSize: 0,
         bundlePolicy: "max-bundle",
         rtcpMuxPolicy: "require",
       });
