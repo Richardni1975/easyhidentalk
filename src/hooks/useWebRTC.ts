@@ -39,9 +39,6 @@ export function useWebRTC() {
   // Buffer ICE candidates that arrive before the PC is created
   const pendingIceCandidates = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
 
-  // Original camera track (for beauty filter restore)
-  const originalVideoTrackRef = useRef<MediaStreamTrack | null>(null);
-
   // Screen share state
   const mainStreamIdPerPeerRef = useRef<Map<string, string>>(new Map());
   const screenSenders = useRef<Map<string, RTCRtpSender>>(new Map());
@@ -101,8 +98,6 @@ export function useWebRTC() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      const vt = stream.getVideoTracks()[0];
-      if (vt) originalVideoTrackRef.current = vt;
       localStreamRef.current = stream;
       setLocalStream(stream);
       return stream;
@@ -155,7 +150,6 @@ export function useWebRTC() {
       });
 
       // Add local tracks — use ref for latest track state
-      // so freshly-joined peers get the beauty-processed video track
       const trackSource = localStreamRef.current || stream;
       trackSource.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
@@ -538,29 +532,6 @@ export function useWebRTC() {
     });
   }
 
-  /** Replace the video track in all peer connections (used by beauty filter).
-   *  Does NOT update localStream — doing so would create a feedback loop:
-   *  replaceVideoTrack → setLocalStream → useBeautyFilter restarts → replaceVideoTrack → …
-   *  VideoGrid uses `beautyStream ?? localStream` so display is covered. */
-  const replaceVideoTrack = useCallback((track: MediaStreamTrack | null) => {
-    setPeerVideoTrack(track);
-    // Keep localStreamRef in sync for downstream code that reads it directly
-    const s = localStreamRef.current;
-    if (s) {
-      const old = s.getVideoTracks()[0];
-      if (track && old !== track) {
-        if (old) s.removeTrack(old);
-        s.addTrack(track);
-      } else if (!track && old) {
-        const orig = originalVideoTrackRef.current;
-        if (orig && orig !== old) {
-          s.removeTrack(old);
-          s.addTrack(orig);
-        }
-      }
-    }
-  }, []);
-
   const createOffer = useCallback(
     async (peerId: string) => {
       const entry = peerConnections.current.get(peerId);
@@ -680,7 +651,6 @@ export function useWebRTC() {
     toggleVideo,
     stopAudioTrackForStt,
     restartAudioTrackForStt,
-    replaceVideoTrack,
     createOffer,
     handleOffer,
     handleAnswer,

@@ -6,7 +6,6 @@ import { useWebRTC } from "../hooks/useWebRTC";
 import VideoGrid from "../components/VideoGrid";
 import ControlBar from "../components/ControlBar";
 import ChatPanel from "../components/ChatPanel";
-import { useBeautyFilter } from "../hooks/useBeautyFilter";
 import type { Participant, ChatMessage, Poll } from "../types";
 import PollResultsModal from "../components/PollResultsModal";
 import PollBrowserModal from "../components/PollBrowserModal";
@@ -65,7 +64,6 @@ function MeetingRoomInner() {
     handleOffer,
     handleAnswer,
     addIceCandidate,
-    replaceVideoTrack,
     cleanupAll,
   } = useWebRTC();
 
@@ -448,14 +446,8 @@ function MeetingRoomInner() {
     [stopAudioTrackForStt, restartAudioTrackForStt, setIsMuted, emit]
   );
 
-  // Beauty filter — always-on, processed stream replaces original
-  const { beautyStream } = useBeautyFilter(localStream, { replaceVideoTrack });
-
-  // Effective video stream for local display (beauty-processed)
-  const displayStream = useMemo(
-    () => beautyStream ?? localStream,
-    [beautyStream, localStream]
-  );
+  // Effective video stream for local display
+  const displayStream = localStream;
 
   // Host determination
   const hostPeerId = useMemo(() => {
