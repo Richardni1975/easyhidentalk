@@ -24,6 +24,10 @@ export class BeautyPipeline {
   private params: BeautyParams;
   private width: number;
   private height: number;
+  /** Resolved once at least one frame has been rendered successfully */
+  private _ready = false;
+  private _readyResolve: (() => void) | null = null;
+  readonly ready: Promise<void>;
 
   constructor(inputStream: MediaStream, width = 640, height = 480) {
     this.params = { ...DEFAULT_PARAMS };
@@ -48,6 +52,10 @@ export class BeautyPipeline {
 
     // Offscreen canvas for the low-res intermediate — no DOM append needed
     this.offscreen = document.createElement("canvas");
+
+    this.ready = new Promise<void>((resolve) => {
+      this._readyResolve = resolve;
+    });
   }
 
   start(): MediaStream | null {
@@ -126,6 +134,14 @@ export class BeautyPipeline {
     const vh = video.videoHeight;
     if (!vw || !vh) return;
 
+    // Mark ready on first valid frame so the consumer knows the pipeline
+    // is producing real frames (not blank) before replacing the video track.
+    if (!this._ready) {
+      this._ready = true;
+      this._readyResolve?.();
+      this._readyResolve = null;
+    }
+
     // Match canvas to video aspect ratio (resize only when needed)
     if (this.canvas.width !== vw || this.canvas.height !== vh) {
       this.canvas.width = vw;
@@ -185,5 +201,10 @@ export class BeautyPipeline {
       this.inputVideo.parentNode.removeChild(this.inputVideo);
     }
     this.inputStream = null;
+  }
+
+  /** Returns true after the first valid frame has been rendered */
+  isReady(): boolean {
+    return this._ready;
   }
 }

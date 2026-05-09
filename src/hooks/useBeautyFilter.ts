@@ -28,6 +28,7 @@ export function useBeautyFilter(
     if (!videoTrack) return;
 
     let destroyed = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
 
     try {
       const pipeline = new BeautyPipeline(rawStream, width, height);
@@ -38,7 +39,28 @@ export function useBeautyFilter(
       }
 
       pipelineRef.current = pipeline;
-      setBeautyStream(out);
+
+      // Wait for the pipeline to actually render its first frame before
+      // exposing beautyStream. This prevents replacing the original camera
+      // track with an empty/black canvas when the hidden video element
+      // hasn't started playing yet (common on desktop browsers).
+      pipeline.ready.then(() => {
+        if (!destroyed) {
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+          setBeautyStream(out);
+        }
+      });
+
+      // Safety timeout: fall back to original stream if pipeline takes >3s
+      fallbackTimer = setTimeout(() => {
+        if (!destroyed && !pipeline.isReady()) {
+          console.warn("Beauty pipeline not ready after 3s, falling back to raw stream");
+          pipeline.stop();
+          pipeline.destroy();
+          pipelineRef.current = null;
+          setBeautyStream(null);
+        }
+      }, 3000);
     } catch (e) {
       console.warn("Beauty pipeline failed to start:", e);
       return;
@@ -46,6 +68,7 @@ export function useBeautyFilter(
 
     return () => {
       destroyed = true;
+      if (fallbackTimer) clearTimeout(fallbackTimer);
       if (pipelineRef.current) {
         pipelineRef.current.stop();
         pipelineRef.current.destroy();
