@@ -31,12 +31,14 @@ export class BeautyPipeline {
     this.height = height;
     this.inputStream = inputStream;
 
-    // Hidden video element to feed frames (no DOM append needed)
+    // Hidden video element to feed frames (must be in DOM for playback)
     this.inputVideo = document.createElement("video");
     this.inputVideo.srcObject = inputStream;
     this.inputVideo.playsInline = true;
     this.inputVideo.muted = true;
     this.inputVideo.setAttribute("playsinline", "");
+    this.inputVideo.style.display = "none";
+    document.body.appendChild(this.inputVideo);
 
     // Main canvas (will be captured) — no DOM append needed
     const c = document.createElement("canvas");
@@ -179,6 +181,9 @@ export class BeautyPipeline {
   // ── Cleanup ───────────────────────────────────────────────────────────
   destroy(): void {
     this.stop();
+    if (this.inputVideo.parentNode) {
+      this.inputVideo.parentNode.removeChild(this.inputVideo);
+    }
     this.inputStream = null;
   }
 }
