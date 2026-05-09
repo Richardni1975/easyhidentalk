@@ -280,6 +280,10 @@ function MeetingRoomInner() {
       setPolls(existingPolls);
     });
 
+    const unsubPollError = on("poll-error", (data: { message: string }) => {
+      alert(data.message);
+    });
+
     // If someone was already sharing screen when we joined
     const unsubCurrentShare = on("current-screen-share", (data: { peerId: string }) => {
       setScreenSharingPeerId(data.peerId);
@@ -305,6 +309,7 @@ function MeetingRoomInner() {
       unsubPollCreated();
       unsubPollUpdated();
       unsubPollClosed();
+      unsubPollError();
       unsubExistingPolls();
     };
   }, [connected, roomId, localStream, socketConnected, connectCount]);

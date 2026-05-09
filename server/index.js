@@ -322,9 +322,20 @@ io.on("connection", (socket) => {
     const poll = polls.get(pollId);
     if (!poll || poll.status !== "open") return;
 
-    // Get voter info
+    // Get voter info — use currentPeerId, but fallback to socket.id lookup
+    // in case of a peerId desync (e.g., after reconnect)
     const room = rooms.get(currentRoom);
-    const sender = room?.get(currentPeerId);
+    let sender = room?.get(currentPeerId);
+    if (!sender) {
+      // Fallback: find participant whose socket.id maps to this socket
+      for (const [pid, sid] of peerSockets.entries()) {
+        if (sid === socket.id) {
+          currentPeerId = pid;
+          sender = room?.get(pid);
+          break;
+        }
+      }
+    }
     if (!sender) return;
 
     // Check duplicate vote
