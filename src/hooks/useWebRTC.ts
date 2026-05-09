@@ -496,26 +496,24 @@ export function useWebRTC() {
     });
   }
 
-  /** Replace the video track in all peer connections (used by beauty filter) */
+  /** Replace the video track in all peer connections (used by beauty filter).
+   *  Does NOT update localStream — doing so would create a feedback loop:
+   *  replaceVideoTrack → setLocalStream → useBeautyFilter restarts → replaceVideoTrack → …
+   *  VideoGrid uses `beautyStream ?? localStream` so display is covered. */
   const replaceVideoTrack = useCallback((track: MediaStreamTrack | null) => {
     setPeerVideoTrack(track);
-    // Also update localStreamRef
+    // Keep localStreamRef in sync for downstream code that reads it directly
     const s = localStreamRef.current;
     if (s) {
       const old = s.getVideoTracks()[0];
       if (track && old !== track) {
-        if (old) {
-          s.removeTrack(old);
-        }
+        if (old) s.removeTrack(old);
         s.addTrack(track);
-        setLocalStream(new MediaStream(s.getTracks()));
       } else if (!track && old) {
-        // Restore original track
         const orig = originalVideoTrackRef.current;
         if (orig && orig !== old) {
           s.removeTrack(old);
           s.addTrack(orig);
-          setLocalStream(new MediaStream(s.getTracks()));
         }
       }
     }
