@@ -561,31 +561,24 @@ export function useWebRTC() {
     }
   }, []);
 
-  // Serialize SDP operations per-peer to prevent glare and "wrong state" errors
-  const signalingQueue = useRef<Map<string, Promise<void>>>(new Map());
-
-  function chainSignaling(peerId: string, fn: () => Promise<void>): Promise<void> {
-    const prev = signalingQueue.current.get(peerId) || Promise.resolve();
-    const next = prev.then(fn).catch(fn); // run next even if prev errored
-    signalingQueue.current.set(peerId, next);
-    return next;
-  }
-
   const createOffer = useCallback(
     async (peerId: string) => {
       const entry = peerConnections.current.get(peerId);
       if (!entry) return null;
       const pc = entry.pc;
 
-      return chainSignaling(peerId, async () => {
-        if (pc.signalingState === "stable") {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          return offer;
+      try {
+        if (pc.signalingState !== "stable") {
+          console.warn(`createOffer skipped: ${peerId} in state ${pc.signalingState}`);
+          return null;
         }
-        console.warn(`createOffer skipped: ${peerId} in state ${pc.signalingState}`);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        return offer;
+      } catch (err) {
+        console.warn(`createOffer failed for ${peerId}:`, err);
         return null;
-      }) as Promise<any>;
+      }
     },
     []
   );
@@ -596,8 +589,8 @@ export function useWebRTC() {
       if (!entry) return null;
       const pc = entry.pc;
 
-      return chainSignaling(peerId, async () => {
-        // Polite peer: rollback if we have a local offer pending (glare resolution)
+      try {
+        // Polite peer: rollback if we have a local offer pending (glare)
         if (pc.signalingState !== "stable") {
           await pc.setLocalDescription({ type: "rollback" });
         }
@@ -605,7 +598,10 @@ export function useWebRTC() {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         return answer;
-      }) as Promise<any>;
+      } catch (err) {
+        console.warn(`handleOffer failed for ${peerId}:`, err);
+        return null;
+      }
     },
     []
   );
@@ -616,14 +612,15 @@ export function useWebRTC() {
       if (!entry) return;
       const pc = entry.pc;
 
-      return chainSignaling(peerId, async () => {
-        // Only accept answer if we were expecting one
+      try {
         if (pc.signalingState !== "have-local-offer") {
           console.warn(`Ignored answer for ${peerId} (state: ${pc.signalingState})`);
           return;
         }
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      });
+      } catch (err) {
+        console.warn(`handleAnswer failed for ${peerId}:`, err);
+      }
     },
     []
   );
